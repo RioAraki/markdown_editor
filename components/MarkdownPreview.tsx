@@ -9,6 +9,9 @@ import { Eye } from 'lucide-react';
 export function MarkdownPreview() {
   const { currentContent, selectedDate } = useDiaryContext();
 
+  // Remove label ID comments from preview (but keep visible label display)
+  const previewContent = currentContent.replace(/<!--\s*label-ids:.*?-->\n/g, '');
+
   if (!selectedDate) {
     return (
       <div className="h-full flex items-center justify-center bg-gray-50">
@@ -29,12 +32,12 @@ export function MarkdownPreview() {
 
       {/* Preview content */}
       <div className="flex-1 overflow-y-auto p-4">
-        {currentContent.trim() === '' ? (
+        {previewContent.trim() === '' ? (
           <p className="text-gray-400 italic">Nothing to preview yet...</p>
         ) : (
           <article className="prose prose-sm prose-slate max-w-none prose-headings:font-semibold prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {currentContent}
+              {previewContent}
             </ReactMarkdown>
           </article>
         )}

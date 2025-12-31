@@ -2,10 +2,11 @@
 
 import React, { useState } from 'react';
 import { useDiaryContext } from '@/contexts/DiaryContext';
-import { formatDisplayDate, getTodayDate } from '@/lib/dateUtils';
+import { getTodayDate } from '@/lib/dateUtils';
 import { Button } from './ui/Button';
 import { LoadingSpinner } from './ui/LoadingSpinner';
-import { Plus, Calendar } from 'lucide-react';
+import { Plus, BookOpen } from 'lucide-react';
+import { Calendar } from './Calendar';
 
 export function DiaryList() {
   const {
@@ -38,10 +39,20 @@ export function DiaryList() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-gray-50">
-      <div className="p-4 border-b border-gray-200 bg-white">
-        <h2 className="text-lg font-semibold mb-3">Diary Entries</h2>
+    <div className="flex flex-col h-full bg-white border-r border-gray-200">
+      {/* Header */}
+      <div className="px-4 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+        <h2 className="text-lg font-semibold text-blue-900 flex items-center">
+          <BookOpen className="w-5 h-5 mr-2 text-blue-600" />
+          Diary Entries
+        </h2>
+        <p className="text-sm text-blue-600 mt-1">
+          {diaries.length} {diaries.length === 1 ? 'entry' : 'entries'}
+        </p>
+      </div>
 
+      {/* New Entry Button */}
+      <div className="p-4 border-b border-gray-200">
         {showDatePicker ? (
           <div className="space-y-2">
             <input
@@ -80,34 +91,19 @@ export function DiaryList() {
         )}
       </div>
 
+      {/* Calendar */}
       <div className="flex-1 overflow-y-auto">
         {diaries.length === 0 ? (
           <div className="p-4 text-center text-gray-500">
-            <Calendar className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+            <BookOpen className="w-12 h-12 mx-auto mb-2 text-gray-400" />
             <p>No diary entries yet</p>
           </div>
         ) : (
-          <ul>
-            {diaries.map((diary) => (
-              <li key={diary.date}>
-                <button
-                  onClick={() => selectDiary(diary.date)}
-                  className={`w-full text-left px-4 py-3 border-b border-gray-200 transition-colors hover:bg-gray-100 ${
-                    selectedDate === diary.date
-                      ? 'bg-blue-50 border-l-4 border-l-blue-500'
-                      : 'border-l-4 border-l-transparent'
-                  }`}
-                >
-                  <div className="font-medium text-gray-900">
-                    {diary.date}
-                  </div>
-                  <div className="text-sm text-gray-600">
-                    {formatDisplayDate(diary.date)}
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
+          <Calendar
+            markedDates={diaries.map(d => d.date)}
+            selectedDate={selectedDate}
+            onSelectDate={selectDiary}
+          />
         )}
       </div>
     </div>
