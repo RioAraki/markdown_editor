@@ -13,10 +13,10 @@ export function Navigation() {
   ];
 
   return (
-    <div className="fixed top-0 left-1/2 -translate-x-1/2 z-50 group">
+    <div className="fixed top-0 right-4 z-50 group">
       {/* Hover trigger area */}
-      <div className="h-2 w-32 mx-auto" />
-      
+      <div className="h-2 w-32" />
+
       {/* Navigation tabs - hidden by default, shown on hover */}
       <div className="opacity-0 -translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200 ease-out">
         <div className="bg-white/95 backdrop-blur-sm border border-gray-200 rounded-full shadow-lg px-2 py-1.5 flex items-center space-x-1">

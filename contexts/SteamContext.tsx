@@ -11,6 +11,7 @@ interface SteamContextType {
   error: string | null;
   selectExport: (date: string) => void;
   refreshExports: () => Promise<void>;
+  refreshData: () => Promise<void>;
 }
 
 const SteamContext = createContext<SteamContextType | undefined>(undefined);
@@ -76,6 +77,13 @@ export function SteamProvider({ children }: { children: React.ReactNode }) {
     await fetchExports();
   }, [fetchExports]);
 
+  // Refresh current data
+  const refreshData = useCallback(async () => {
+    if (selectedDate) {
+      await loadExportData(selectedDate);
+    }
+  }, [selectedDate, loadExportData]);
+
   // Load exports on mount
   useEffect(() => {
     fetchExports();
@@ -96,6 +104,7 @@ export function SteamProvider({ children }: { children: React.ReactNode }) {
     error,
     selectExport,
     refreshExports,
+    refreshData,
   };
 
   return (

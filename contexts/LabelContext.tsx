@@ -3,8 +3,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { Label, DEFAULT_LABELS } from '@/types/label';
 
-const LABELS_STORAGE_KEY = 'diary-labels';
-
 interface LabelContextType {
   labels: Label[];
   addLabel: (name: string, color: string) => Label;
@@ -18,28 +16,44 @@ export function LabelProvider({ children }: { children: React.ReactNode }) {
   const [labels, setLabels] = useState<Label[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Load labels from localStorage on mount
+  // Load labels from API on mount
   useEffect(() => {
-    const stored = localStorage.getItem(LABELS_STORAGE_KEY);
-    if (stored) {
+    const fetchLabels = async () => {
       try {
-        const parsed = JSON.parse(stored);
-        setLabels(parsed);
+        const response = await fetch('/api/labels');
+        if (response.ok) {
+          const data = await response.json();
+          setLabels(data.labels);
+        } else {
+          console.error('Failed to load labels from API');
+          setLabels(DEFAULT_LABELS);
+        }
       } catch (err) {
-        console.error('Failed to parse labels from localStorage:', err);
+        console.error('Error fetching labels:', err);
         setLabels(DEFAULT_LABELS);
       }
-    } else {
-      // First time: use default labels
-      setLabels(DEFAULT_LABELS);
-    }
-    setIsInitialized(true);
+      setIsInitialized(true);
+    };
+
+    fetchLabels();
   }, []);
 
-  // Save labels to localStorage whenever they change (after initialization)
+  // Save labels to API whenever they change (after initialization)
   useEffect(() => {
-    if (isInitialized) {
-      localStorage.setItem(LABELS_STORAGE_KEY, JSON.stringify(labels));
+    if (isInitialized && labels.length > 0) {
+      const saveLabels = async () => {
+        try {
+          await fetch('/api/labels', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ labels }),
+          });
+        } catch (err) {
+          console.error('Error saving labels:', err);
+        }
+      };
+
+      saveLabels();
     }
   }, [labels, isInitialized]);
 

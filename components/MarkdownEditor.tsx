@@ -1,14 +1,18 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 import { useDiaryContext } from '@/contexts/DiaryContext';
 import { formatDisplayDate } from '@/lib/dateUtils';
 import { format } from 'date-fns';
-import { Save, Check, AlertCircle, Loader2, Cloud } from 'lucide-react';
+import { Save, Check, AlertCircle, Loader2, Cloud, FileCheck, Globe, ExternalLink } from 'lucide-react';
 import { LabelSelector } from './LabelSelector';
+import { AuditDialog } from './AuditDialog';
+import { PublishDialog } from './PublishDialog';
+import { MarkdownToolbar } from './MarkdownToolbar';
 import { parseLabelsFromMarkdown, updateLabelsInMarkdown } from '@/lib/labelUtils';
 import { useLabels } from '@/contexts/LabelContext';
+import { runAudit, AuditResult } from '@/lib/auditRules';
 
 export function MarkdownEditor() {
   const {
@@ -25,6 +29,16 @@ export function MarkdownEditor() {
   const { labels } = useLabels();
   const [isLoadingWeather, setIsLoadingWeather] = useState(false);
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
+  const [showAuditDialog, setShowAuditDialog] = useState(false);
+  const [auditResult, setAuditResult] = useState<AuditResult | null>(null);
+  const [showPublishDialog, setShowPublishDialog] = useState(false);
+  const [publishStatus, setPublishStatus] = useState<{
+    isPublished: boolean;
+    tokenId?: string;
+    url?: string;
+    fileExists?: boolean;
+  }>({ isPublished: false });
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Parse labels from content when it changes
   useEffect(() => {
@@ -38,12 +52,62 @@ export function MarkdownEditor() {
     updateContent(updatedContent);
   };
 
-  // Add Ctrl+S keyboard shortcut
+  // Add keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+
+      // Ctrl+S: Save
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault(); // Prevent browser's save dialog
+        e.preventDefault();
         saveNow();
+      }
+      // Ctrl+B: Bold
+      else if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+        e.preventDefault();
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const selectedText = currentContent.substring(start, end);
+        const before = currentContent.substring(0, start);
+        const after = currentContent.substring(end);
+
+        if (selectedText) {
+          updateContent(before + '**' + selectedText + '**' + after);
+          setTimeout(() => {
+            textarea.focus();
+            textarea.setSelectionRange(start + 2, end + 2);
+          }, 0);
+        } else {
+          updateContent(before + '**text**' + after);
+          setTimeout(() => {
+            textarea.focus();
+            textarea.setSelectionRange(start + 2, start + 6);
+          }, 0);
+        }
+      }
+      // Ctrl+I: Italic
+      else if ((e.ctrlKey || e.metaKey) && e.key === 'i') {
+        e.preventDefault();
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const selectedText = currentContent.substring(start, end);
+        const before = currentContent.substring(0, start);
+        const after = currentContent.substring(end);
+
+        if (selectedText) {
+          updateContent(before + '*' + selectedText + '*' + after);
+          setTimeout(() => {
+            textarea.focus();
+            textarea.setSelectionRange(start + 1, end + 1);
+          }, 0);
+        } else {
+          updateContent(before + '*text*' + after);
+          setTimeout(() => {
+            textarea.focus();
+            textarea.setSelectionRange(start + 1, start + 5);
+          }, 0);
+        }
       }
     };
 
@@ -120,6 +184,92 @@ export function MarkdownEditor() {
     }
   };
 
+  // Handle audit
+  const handleAudit = () => {
+    const result = runAudit(currentContent);
+    setAuditResult(result);
+    setShowAuditDialog(true);
+  };
+
+  // Handle audit confirmation
+  const handleAuditConfirm = () => {
+    if (auditResult) {
+      updateContent(auditResult.fixedText);
+    }
+  };
+
+  // Fetch publish status when date changes
+  useEffect(() => {
+    const fetchPublishStatus = async () => {
+      if (!selectedDate) return;
+
+      try {
+        const response = await fetch(`/api/publish/${selectedDate}`);
+        if (response.ok) {
+          const data = await response.json();
+          setPublishStatus(data);
+        }
+      } catch (err) {
+        console.error('Error fetching publish status:', err);
+      }
+    };
+
+    fetchPublishStatus();
+  }, [selectedDate]);
+
+  // Handle publish
+  const handlePublish = async (tokenId: string, description?: string) => {
+    try {
+      const response = await fetch('/api/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: selectedDate, tokenId, description }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to publish');
+      }
+
+      const data = await response.json();
+      setPublishStatus({
+        isPublished: true,
+        tokenId: data.tokenId,
+        url: data.url,
+        fileExists: true,
+      });
+
+      alert(`Published successfully at ${data.url}`);
+    } catch (err) {
+      throw err; // Re-throw to be handled by PublishDialog
+    }
+  };
+
+  // Handle unpublish
+  const handleUnpublish = async () => {
+    if (!confirm('Are you sure you want to unpublish this entry?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/publish', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: selectedDate }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to unpublish');
+      }
+
+      setPublishStatus({ isPublished: false });
+      alert('Unpublished successfully');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to unpublish');
+    }
+  };
+
   if (!selectedDate) {
     return (
       <div className="h-full flex items-center justify-center bg-gray-50">
@@ -147,20 +297,29 @@ export function MarkdownEditor() {
             onLabelsChange={handleLabelsChange}
           />
 
-          {/* Weather button */}
-          <button
-            onClick={handleAddWeather}
-            disabled={isLoadingWeather}
-            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            title="Add weather data"
-          >
-            {isLoadingWeather ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Cloud className="w-4 h-4" />
-            )}
-            {isLoadingWeather ? 'Loading...' : 'Weather'}
-          </button>
+          {/* Publish status (when published) */}
+          {publishStatus.isPublished && (
+            <div className="flex items-center gap-2">
+              <a
+                href={publishStatus.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-green-700 bg-green-50 rounded-md hover:bg-green-100 transition-colors"
+                title="View published entry"
+              >
+                <Globe className="w-4 h-4" />
+                Published
+                <ExternalLink className="w-3 h-3" />
+              </a>
+              <button
+                onClick={handleUnpublish}
+                className="px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100 transition-colors"
+                title="Unpublish this entry"
+              >
+                Unpublish
+              </button>
+            </div>
+          )}
 
           {/* Save status indicator */}
           <div className="flex items-center gap-2 text-sm">
@@ -192,9 +351,23 @@ export function MarkdownEditor() {
         </div>
       </div>
 
+      {/* Markdown Toolbar */}
+      <MarkdownToolbar
+        textareaRef={textareaRef}
+        onContentChange={updateContent}
+        content={currentContent}
+        onWeatherClick={handleAddWeather}
+        isLoadingWeather={isLoadingWeather}
+        onAuditClick={handleAudit}
+        onPublishClick={() => setShowPublishDialog(true)}
+        isPublished={publishStatus.isPublished}
+        publishDisabled={!publishStatus.fileExists}
+      />
+
       {/* Editor */}
       <div className="flex-1 overflow-y-auto">
         <TextareaAutosize
+          ref={textareaRef}
           value={currentContent}
           onChange={(e) => updateContent(e.target.value)}
           placeholder="Start writing your diary entry..."
@@ -202,6 +375,24 @@ export function MarkdownEditor() {
           minRows={20}
         />
       </div>
+
+      {/* Audit Dialog */}
+      <AuditDialog
+        isOpen={showAuditDialog}
+        onClose={() => setShowAuditDialog(false)}
+        result={auditResult}
+        onConfirm={handleAuditConfirm}
+      />
+
+      {/* Publish Dialog */}
+      <PublishDialog
+        isOpen={showPublishDialog}
+        onClose={() => setShowPublishDialog(false)}
+        date={selectedDate || ''}
+        onPublish={handlePublish}
+        isPublished={publishStatus.isPublished}
+        currentUrl={publishStatus.url}
+      />
     </div>
   );
 }
