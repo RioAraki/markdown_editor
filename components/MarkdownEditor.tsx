@@ -365,14 +365,13 @@ export function MarkdownEditor() {
       />
 
       {/* Editor */}
-      <div className="flex-1 overflow-y-auto">
-        <TextareaAutosize
+      <div className="flex-1 min-h-0">
+        <textarea
           ref={textareaRef}
           value={currentContent}
           onChange={(e) => updateContent(e.target.value)}
           placeholder="Start writing your diary entry..."
-          className="w-full h-full min-h-full p-4 font-mono text-sm leading-relaxed resize-none focus:outline-none"
-          minRows={20}
+          className="w-full h-full p-4 font-mono text-sm leading-relaxed resize-none focus:outline-none overflow-y-auto"
         />
       </div>
 

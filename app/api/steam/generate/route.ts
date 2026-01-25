@@ -3,7 +3,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const STEAM_EXPORT_DIR = 'D:\\diary\\data\\steam_export';
+const STEAM_IMG_DIR = 'D:\\diary\\steam_img';
 const STEAM_API_BASE = 'http://api.steampowered.com';
+const STEAM_CDN_BASE = 'http://media.steampowered.com/steamcommunity/public/images/apps';
 
 interface SteamGame {
   appid: number;
@@ -61,6 +63,11 @@ export async function POST(request: NextRequest) {
     const filepath = path.join(STEAM_EXPORT_DIR, filename);
 
     fs.writeFileSync(filepath, JSON.stringify(exportData, null, 2));
+
+    // Download game icons in the background
+    downloadGameIcons(weeklyGames).catch(err => {
+      console.error('Error downloading game icons:', err);
+    });
 
     return NextResponse.json({
       success: true,
@@ -133,4 +140,39 @@ function calculateWeeklyPlaytime(currentGames: SteamGame[], previousGames: Steam
       };
     }
   });
+}
+
+async function downloadGameIcons(games: SteamGame[]): Promise<void> {
+  // Ensure image directory exists
+  if (!fs.existsSync(STEAM_IMG_DIR)) {
+    fs.mkdirSync(STEAM_IMG_DIR, { recursive: true });
+  }
+
+  for (const game of games) {
+    if (!game.img_icon_url) continue;
+
+    const localPath = path.join(STEAM_IMG_DIR, `${game.appid}.jpg`);
+
+    // Skip if image already exists
+    if (fs.existsSync(localPath)) continue;
+
+    try {
+      const iconUrl = `${STEAM_CDN_BASE}/${game.appid}/${game.img_icon_url}.jpg`;
+      const response = await fetch(iconUrl);
+
+      if (!response.ok) {
+        console.warn(`Failed to download icon for ${game.name} (${game.appid}): ${response.status}`);
+        continue;
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      fs.writeFileSync(localPath, Buffer.from(arrayBuffer));
+      console.log(`Downloaded icon for ${game.name}`);
+
+      // Small delay to be respectful to Steam servers
+      await new Promise(resolve => setTimeout(resolve, 100));
+    } catch (error) {
+      console.error(`Error downloading icon for ${game.name}:`, error);
+    }
+  }
 }
