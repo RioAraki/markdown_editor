@@ -135,7 +135,7 @@ export function ArchiveProvider({ children }: { children: React.ReactNode }) {
     }
   }, [archives]);
 
-  // Update archive title
+  // Update archive title (may also change the ID/filename)
   const updateTitle = useCallback(async (id: string, title: string) => {
     try {
       const response = await fetch(`/api/archive/${id}`, {
@@ -151,12 +151,13 @@ export function ArchiveProvider({ children }: { children: React.ReactNode }) {
       const data = await response.json();
       const updatedArchive = data.archive;
 
-      // Update local state
+      // Update local state - note that ID may have changed
       setArchives(archives.map(a =>
         a.id === id ? updatedArchive : a
       ));
 
       // Update selected archive if it's the one being edited
+      // The ID may have changed due to filename rename
       if (selectedArchive?.id === id) {
         setSelectedArchive(updatedArchive);
       }

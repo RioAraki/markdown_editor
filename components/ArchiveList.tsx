@@ -1,10 +1,21 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Archive, Plus, Trash2, Edit2, Check, X } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Archive, Plus, Trash2, Edit2, Check, X, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { useArchive } from '@/contexts/ArchiveContext';
 import { Button } from './ui/Button';
+
+// Sanitize title to filename (client-side preview, mirrors server logic)
+function sanitizeFilename(title: string): string {
+  return title
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]+/gi, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    || 'untitled';
+}
 
 export function ArchiveList() {
   const {
@@ -22,6 +33,12 @@ export function ArchiveList() {
   const [isCreating, setIsCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
+
+  // Preview of generated filename
+  const previewFilename = useMemo(() => {
+    if (!newTitle.trim()) return '';
+    return sanitizeFilename(newTitle) + '.md';
+  }, [newTitle]);
 
   // Handle create
   const handleCreate = async () => {
@@ -231,6 +248,12 @@ export function ArchiveList() {
                   }
                 }}
               />
+              {previewFilename && (
+                <div className="mt-3 flex items-center gap-2 text-sm text-gray-500">
+                  <FileText className="w-4 h-4" />
+                  <span>File: <code className="bg-gray-100 px-1.5 py-0.5 rounded text-amber-700">{previewFilename}</code></span>
+                </div>
+              )}
             </div>
             <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3 bg-gray-50">
               <button

@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import {
+  parseMarkdownWithFrontmatter,
+  serializeMarkdownWithFrontmatter,
+  sanitizeFilename,
+  generateUniqueFilename,
+  ArchiveFrontmatter,
+} from '@/lib/archiveUtils';
 import { ArchiveItem } from '../route';
 
 const ARCHIVE_DIR = path.join('D:', 'diary', 'data', 'archive');
@@ -12,7 +19,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const filePath = path.join(ARCHIVE_DIR, `${id}.json`);
+    const filePath = path.join(ARCHIVE_DIR, `${id}.md`);
 
     if (!fs.existsSync(filePath)) {
       return NextResponse.json(
@@ -21,8 +28,16 @@ export async function GET(
       );
     }
 
-    const content = fs.readFileSync(filePath, 'utf-8');
-    const archive: ArchiveItem = JSON.parse(content);
+    const fileContent = fs.readFileSync(filePath, 'utf-8');
+    const parsed = parseMarkdownWithFrontmatter(fileContent);
+
+    const archive: ArchiveItem = {
+      id,
+      title: parsed.frontmatter.title,
+      content: parsed.content,
+      createdAt: parsed.frontmatter.createdAt,
+      ...(parsed.frontmatter.originalDate && { originalDate: parsed.frontmatter.originalDate }),
+    };
 
     return NextResponse.json({ archive });
   } catch (error) {
@@ -42,9 +57,9 @@ export async function PUT(
   try {
     const { id } = await params;
     const { title, content } = await request.json();
-    const filePath = path.join(ARCHIVE_DIR, `${id}.json`);
+    const currentFilePath = path.join(ARCHIVE_DIR, `${id}.md`);
 
-    if (!fs.existsSync(filePath)) {
+    if (!fs.existsSync(currentFilePath)) {
       return NextResponse.json(
         { error: 'Archive not found' },
         { status: 404 }
@@ -52,15 +67,48 @@ export async function PUT(
     }
 
     // Read current archive
-    const currentContent = fs.readFileSync(filePath, 'utf-8');
-    const archive: ArchiveItem = JSON.parse(currentContent);
+    const fileContent = fs.readFileSync(currentFilePath, 'utf-8');
+    const parsed = parseMarkdownWithFrontmatter(fileContent);
 
-    // Update fields
-    if (title !== undefined) archive.title = title;
-    if (content !== undefined) archive.content = content;
+    // Update frontmatter
+    const updatedFrontmatter: ArchiveFrontmatter = {
+      ...parsed.frontmatter,
+    };
 
-    // Save updated archive
-    fs.writeFileSync(filePath, JSON.stringify(archive, null, 2), 'utf-8');
+    if (title !== undefined) {
+      updatedFrontmatter.title = title;
+    }
+
+    // Update content
+    const updatedContent = content !== undefined ? content : parsed.content;
+
+    // Determine if we need to rename the file (title changed)
+    let newId = id;
+    let newFilePath = currentFilePath;
+
+    if (title !== undefined && title !== parsed.frontmatter.title) {
+      // Generate new filename from new title
+      const baseFilename = sanitizeFilename(title);
+      newId = generateUniqueFilename(ARCHIVE_DIR, baseFilename, `${id}.md`);
+      newFilePath = path.join(ARCHIVE_DIR, `${newId}.md`);
+    }
+
+    // Serialize and save
+    const mdContent = serializeMarkdownWithFrontmatter(updatedFrontmatter, updatedContent);
+    fs.writeFileSync(newFilePath, mdContent, 'utf-8');
+
+    // Delete old file if renamed
+    if (newFilePath !== currentFilePath) {
+      fs.unlinkSync(currentFilePath);
+    }
+
+    const archive: ArchiveItem = {
+      id: newId,
+      title: updatedFrontmatter.title,
+      content: updatedContent,
+      createdAt: updatedFrontmatter.createdAt,
+      ...(updatedFrontmatter.originalDate && { originalDate: updatedFrontmatter.originalDate }),
+    };
 
     return NextResponse.json({ success: true, archive });
   } catch (error) {
@@ -79,7 +127,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const filePath = path.join(ARCHIVE_DIR, `${id}.json`);
+    const filePath = path.join(ARCHIVE_DIR, `${id}.md`);
 
     if (!fs.existsSync(filePath)) {
       return NextResponse.json(

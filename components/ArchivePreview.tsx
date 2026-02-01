@@ -2,6 +2,7 @@
 
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useArchive } from '@/contexts/ArchiveContext';
 import { Archive } from 'lucide-react';
 
@@ -29,7 +30,7 @@ export function ArchivePreview() {
       {/* Preview Content */}
       <div className="flex-1 overflow-y-auto p-6">
         <article className="prose prose-sm prose-slate max-w-none prose-headings:font-semibold prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg">
-          <ReactMarkdown>{currentContent}</ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{currentContent}</ReactMarkdown>
         </article>
       </div>
     </div>

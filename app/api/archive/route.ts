@@ -1,16 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import {
+  parseMarkdownWithFrontmatter,
+  serializeMarkdownWithFrontmatter,
+  sanitizeFilename,
+  generateUniqueFilename,
+  migrateAllJsonArchives,
+  ArchiveFrontmatter,
+} from '@/lib/archiveUtils';
 
 const ARCHIVE_DIR = path.join('D:', 'diary', 'data', 'archive');
 
 export interface ArchiveItem {
-  id: string;
+  id: string; // filename without .md extension
   title: string;
   content: string;
   createdAt: string;
-  originalDate?: string; // If archived from a diary entry
+  originalDate?: string;
 }
+
+// Flag to track if migration has run this session
+let migrationComplete = false;
 
 // GET - List all archived items
 export async function GET(request: NextRequest) {
@@ -21,16 +32,36 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ archives: [] });
     }
 
-    // Read all archive files
+    // Run migration on first load (converts .json to .md)
+    if (!migrationComplete) {
+      const migrationResult = migrateAllJsonArchives(ARCHIVE_DIR);
+      if (migrationResult.migrated > 0) {
+        console.log(`Auto-migrated ${migrationResult.migrated} archive(s) to markdown format`);
+      }
+      if (migrationResult.errors.length > 0) {
+        console.error('Migration errors:', migrationResult.errors);
+      }
+      migrationComplete = true;
+    }
+
+    // Read all markdown archive files
     const files = fs.readdirSync(ARCHIVE_DIR);
     const archives: ArchiveItem[] = [];
 
     for (const file of files) {
-      if (file.endsWith('.json')) {
+      if (file.endsWith('.md')) {
         const filePath = path.join(ARCHIVE_DIR, file);
-        const content = fs.readFileSync(filePath, 'utf-8');
-        const archive = JSON.parse(content);
-        archives.push(archive);
+        const fileContent = fs.readFileSync(filePath, 'utf-8');
+        const parsed = parseMarkdownWithFrontmatter(fileContent);
+
+        const id = file.replace(/\.md$/, '');
+        archives.push({
+          id,
+          title: parsed.frontmatter.title,
+          content: parsed.content,
+          createdAt: parsed.frontmatter.createdAt,
+          ...(parsed.frontmatter.originalDate && { originalDate: parsed.frontmatter.originalDate }),
+        });
       }
     }
 
@@ -64,20 +95,32 @@ export async function POST(request: NextRequest) {
       fs.mkdirSync(ARCHIVE_DIR, { recursive: true });
     }
 
-    // Create archive item
-    const id = Date.now().toString();
-    const archive: ArchiveItem = {
-      id,
+    // Generate filename from title
+    const baseFilename = sanitizeFilename(title);
+    const uniqueFilename = generateUniqueFilename(ARCHIVE_DIR, baseFilename);
+
+    // Create frontmatter
+    const frontmatter: ArchiveFrontmatter = {
       title,
-      content,
       createdAt: new Date().toISOString(),
-      ...(originalDate && { originalDate }),
     };
 
-    // Save to file
-    const filename = `${id}.json`;
-    const filePath = path.join(ARCHIVE_DIR, filename);
-    fs.writeFileSync(filePath, JSON.stringify(archive, null, 2), 'utf-8');
+    if (originalDate) {
+      frontmatter.originalDate = originalDate;
+    }
+
+    // Serialize and save
+    const mdContent = serializeMarkdownWithFrontmatter(frontmatter, content || '');
+    const filePath = path.join(ARCHIVE_DIR, uniqueFilename + '.md');
+    fs.writeFileSync(filePath, mdContent, 'utf-8');
+
+    const archive: ArchiveItem = {
+      id: uniqueFilename,
+      title,
+      content: content || '',
+      createdAt: frontmatter.createdAt,
+      ...(originalDate && { originalDate }),
+    };
 
     return NextResponse.json({ success: true, archive });
   } catch (error) {
