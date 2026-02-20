@@ -13,21 +13,10 @@ export interface Label {
 // GET - Read labels from config file
 export async function GET(request: NextRequest) {
   try {
-    // Check if config file exists
     if (!fs.existsSync(LABELS_CONFIG_PATH)) {
-      // Return default labels if file doesn't exist
-      const defaultLabels: Label[] = [
-        { id: '1', name: 'Work', color: '#3b82f6' },
-        { id: '2', name: 'Personal', color: '#10b981' },
-        { id: '3', name: 'Ideas', color: '#f59e0b' },
-        { id: '4', name: 'Goals', color: '#8b5cf6' },
-        { id: '5', name: 'Reflection', color: '#ec4899' },
-        { id: '6', name: 'Travel', color: '#06b6d4' },
-      ];
-      return NextResponse.json({ labels: defaultLabels });
+      return NextResponse.json({ labels: [] });
     }
 
-    // Read labels from file
     const fileContent = fs.readFileSync(LABELS_CONFIG_PATH, 'utf-8');
     const labels: Label[] = JSON.parse(fileContent);
 

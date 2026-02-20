@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { Label, DEFAULT_LABELS } from '@/types/label';
+import { Label } from '@/types/label';
 
 interface LabelContextType {
   labels: Label[];
@@ -26,11 +26,11 @@ export function LabelProvider({ children }: { children: React.ReactNode }) {
           setLabels(data.labels);
         } else {
           console.error('Failed to load labels from API');
-          setLabels(DEFAULT_LABELS);
+          setLabels([]);
         }
       } catch (err) {
         console.error('Error fetching labels:', err);
-        setLabels(DEFAULT_LABELS);
+        setLabels([]);
       }
       setIsInitialized(true);
     };
@@ -40,7 +40,7 @@ export function LabelProvider({ children }: { children: React.ReactNode }) {
 
   // Save labels to API whenever they change (after initialization)
   useEffect(() => {
-    if (isInitialized && labels.length > 0) {
+    if (isInitialized) {
       const saveLabels = async () => {
         try {
           await fetch('/api/labels', {
