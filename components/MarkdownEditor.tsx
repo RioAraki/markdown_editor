@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 import { useDiaryContext } from '@/contexts/DiaryContext';
 import { formatDisplayDate } from '@/lib/dateUtils';
@@ -270,6 +270,16 @@ export function MarkdownEditor() {
     }
   };
 
+  const { charCount, readTime } = useMemo(() => {
+    const chars = currentContent.length;
+    const words = currentContent.trim() ? currentContent.trim().split(/\s+/).length : 0;
+    const minutes = Math.ceil(words / 200);
+    return {
+      charCount: chars,
+      readTime: words < 1 ? '< 1 min read' : minutes === 1 ? '1 min read' : `${minutes} min read`,
+    };
+  }, [currentContent]);
+
   if (!selectedDate) {
     return (
       <div className="h-full flex items-center justify-center bg-gray-50">
@@ -373,6 +383,12 @@ export function MarkdownEditor() {
           placeholder="Start writing your diary entry..."
           className="w-full h-full p-4 font-mono text-sm leading-relaxed resize-none focus:outline-none overflow-y-auto"
         />
+      </div>
+
+      {/* Status bar */}
+      <div className="px-4 py-1.5 border-t border-gray-200 flex items-center justify-end gap-4 text-xs text-gray-400 bg-gray-50">
+        <span>{charCount.toLocaleString()} characters</span>
+        <span>{readTime}</span>
       </div>
 
       {/* Audit Dialog */}
