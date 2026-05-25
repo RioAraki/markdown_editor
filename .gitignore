@@ -42,3 +42,6 @@ next-env.d.ts
 
 # Windows reserved filename
 nul
+
+# auto-commit script log
+/scripts/auto-commit.log
