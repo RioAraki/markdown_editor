@@ -118,7 +118,7 @@ export function ArchiveEditor() {
   return (
     <div className="h-full flex flex-col bg-white">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+      <div className="px-4 pl-14 md:pl-4 py-3 border-b border-gray-200 flex items-center justify-between gap-2">
         <div>
           <h2 className="text-lg font-semibold text-gray-900 flex items-center">
             <Archive className="w-5 h-5 mr-2 text-amber-600" />

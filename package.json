@@ -3,19 +3,21 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3002",
+    "dev": "next dev -p 3002 -H 0.0.0.0",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
     "date-fns": "^4.1.0",
+    "highlight.js": "^11.11.1",
     "lucide-react": "^0.562.0",
     "next": "^15.1.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
     "react-textarea-autosize": "^8.5.9",
+    "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
     "use-debounce": "^10.0.6"
   },

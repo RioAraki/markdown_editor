@@ -1,23 +1,30 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useDiaryContext } from '@/contexts/DiaryContext';
 import { getTodayDate } from '@/lib/dateUtils';
 import { Button } from './ui/Button';
 import { LoadingSpinner } from './ui/LoadingSpinner';
-import { Plus, BookOpen, ChevronLeft, ChevronRight, Archive } from 'lucide-react';
+import { Plus, BookOpen, ChevronLeft, ChevronRight, Archive, Dumbbell } from 'lucide-react';
 import { Calendar } from './Calendar';
 import { ArchiveList } from './ArchiveList';
+import { TrainingList } from './TrainingList';
 
-const SIDEBAR_COLLAPSED_KEY = 'diary-sidebar-collapsed';
+export type SidebarTab = 'diary' | 'archive' | 'training';
 
 interface DiaryListProps {
-  onCollapsedChange?: (collapsed: boolean) => void;
-  activeTab?: 'diary' | 'archive';
-  onTabChange?: (tab: 'diary' | 'archive') => void;
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
+  activeTab?: SidebarTab;
+  onTabChange?: (tab: SidebarTab) => void;
 }
 
-export function DiaryList({ onCollapsedChange, activeTab = 'diary', onTabChange }: DiaryListProps = {}) {
+export function DiaryList({
+  collapsed = false,
+  onToggleCollapsed,
+  activeTab = 'diary',
+  onTabChange,
+}: DiaryListProps = {}) {
   const {
     diaries,
     selectedDate,
@@ -28,25 +35,6 @@ export function DiaryList({ onCollapsedChange, activeTab = 'diary', onTabChange 
 
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [newDate, setNewDate] = useState(getTodayDate());
-  const [isCollapsed, setIsCollapsed] = useState(false);
-
-  // Load collapsed state from localStorage
-  useEffect(() => {
-    const stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
-    if (stored !== null) {
-      const collapsed = stored === 'true';
-      setIsCollapsed(collapsed);
-      onCollapsedChange?.(collapsed);
-    }
-  }, [onCollapsedChange]);
-
-  // Toggle collapsed state
-  const toggleCollapsed = () => {
-    const newCollapsed = !isCollapsed;
-    setIsCollapsed(newCollapsed);
-    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(newCollapsed));
-    onCollapsedChange?.(newCollapsed);
-  };
 
   const handleCreateNew = async () => {
     if (showDatePicker) {
@@ -66,82 +54,126 @@ export function DiaryList({ onCollapsedChange, activeTab = 'diary', onTabChange 
     );
   }
 
+  // Collapsed view: vertical strip with all 3 mode icons clickable + expand button.
+  // Lets users switch modes without expanding (mode switching is one of the two
+  // main reasons the sidebar exists).
+  if (collapsed) {
+    return (
+      <div className="flex flex-col h-full bg-white border-r border-gray-200">
+        <button
+          onClick={onToggleCollapsed}
+          className="flex items-center justify-center py-3 border-b border-gray-200 text-blue-600 hover:bg-blue-50 transition-colors"
+          title="Expand sidebar"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+        <CollapsedTab
+          icon={<BookOpen className="w-5 h-5" />}
+          label="Diary"
+          active={activeTab === 'diary'}
+          activeColor="text-blue-700 bg-blue-50 border-l-blue-600"
+          onClick={() => onTabChange?.('diary')}
+        />
+        <CollapsedTab
+          icon={<Archive className="w-5 h-5" />}
+          label="Archive"
+          active={activeTab === 'archive'}
+          activeColor="text-amber-700 bg-amber-50 border-l-amber-600"
+          onClick={() => onTabChange?.('archive')}
+        />
+        <CollapsedTab
+          icon={<Dumbbell className="w-5 h-5" />}
+          label="Training"
+          active={activeTab === 'training'}
+          activeColor="text-stone-900 bg-stone-100 border-l-stone-800"
+          onClick={() => onTabChange?.('training')}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full bg-white border-r border-gray-200 relative">
       {/* Header */}
       <div className="border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
         <div className="px-4 py-3 flex items-center justify-between">
-          {!isCollapsed && (
-            <div className="flex-1">
-              <h2 className="text-lg font-semibold text-blue-900 flex items-center">
-                {activeTab === 'diary' ? (
-                  <>
-                    <BookOpen className="w-5 h-5 mr-2 text-blue-600" />
-                    Diary Entries
-                  </>
-                ) : (
-                  <>
-                    <Archive className="w-5 h-5 mr-2 text-amber-600" />
-                    Archive Zone
-                  </>
-                )}
-              </h2>
-              <p className="text-sm text-blue-600 mt-1">
-                {activeTab === 'diary'
-                  ? `${diaries.length} ${diaries.length === 1 ? 'entry' : 'entries'}`
-                  : 'Saved drafts'}
-              </p>
-            </div>
-          )}
-          {isCollapsed && (
-            <div className="flex-1 flex justify-center">
-              {activeTab === 'diary' ? (
-                <BookOpen className="w-5 h-5 text-blue-600" />
-              ) : (
-                <Archive className="w-5 h-5 text-amber-600" />
+          <div className="flex-1">
+            <h2 className="text-lg font-semibold text-blue-900 flex items-center">
+              {activeTab === 'diary' && (
+                <>
+                  <BookOpen className="w-5 h-5 mr-2 text-blue-600" />
+                  Diary Entries
+                </>
               )}
-            </div>
-          )}
+              {activeTab === 'archive' && (
+                <>
+                  <Archive className="w-5 h-5 mr-2 text-amber-600" />
+                  Archive Zone
+                </>
+              )}
+              {activeTab === 'training' && (
+                <>
+                  <Dumbbell className="w-5 h-5 mr-2 text-stone-700" />
+                  Training Log
+                </>
+              )}
+            </h2>
+            <p className="text-sm text-blue-600 mt-1">
+              {activeTab === 'diary' &&
+                `${diaries.length} ${diaries.length === 1 ? 'entry' : 'entries'}`}
+              {activeTab === 'archive' && 'Saved drafts'}
+              {activeTab === 'training' && 'Daily check-ins'}
+            </p>
+          </div>
           <button
-            onClick={toggleCollapsed}
+            onClick={onToggleCollapsed}
             className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-md transition-colors flex-shrink-0"
-            title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title="Collapse sidebar"
           >
-            {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+            <ChevronLeft className="w-4 h-4" />
           </button>
         </div>
 
         {/* Tab buttons */}
-        {!isCollapsed && (
-          <div className="flex border-t border-blue-100">
-            <button
-              onClick={() => onTabChange?.('diary')}
-              className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
-                activeTab === 'diary'
-                  ? 'text-blue-700 bg-white border-b-2 border-blue-600'
-                  : 'text-blue-600 hover:bg-blue-50'
-              }`}
-            >
-              <BookOpen className="w-4 h-4 inline mr-1" />
-              Diary
-            </button>
-            <button
-              onClick={() => onTabChange?.('archive')}
-              className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
-                activeTab === 'archive'
-                  ? 'text-amber-700 bg-white border-b-2 border-amber-600'
-                  : 'text-blue-600 hover:bg-blue-50'
-              }`}
-            >
-              <Archive className="w-4 h-4 inline mr-1" />
-              Archive
-            </button>
-          </div>
-        )}
+        <div className="flex border-t border-blue-100">
+          <button
+            onClick={() => onTabChange?.('diary')}
+            className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${
+              activeTab === 'diary'
+                ? 'text-blue-700 bg-white border-b-2 border-blue-600'
+                : 'text-blue-600 hover:bg-blue-50'
+            }`}
+          >
+            <BookOpen className="w-4 h-4 inline mr-1" />
+            Diary
+          </button>
+          <button
+            onClick={() => onTabChange?.('archive')}
+            className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${
+              activeTab === 'archive'
+                ? 'text-amber-700 bg-white border-b-2 border-amber-600'
+                : 'text-blue-600 hover:bg-blue-50'
+            }`}
+          >
+            <Archive className="w-4 h-4 inline mr-1" />
+            Archive
+          </button>
+          <button
+            onClick={() => onTabChange?.('training')}
+            className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${
+              activeTab === 'training'
+                ? 'text-stone-900 bg-white border-b-2 border-stone-800'
+                : 'text-blue-600 hover:bg-blue-50'
+            }`}
+          >
+            <Dumbbell className="w-4 h-4 inline mr-1" />
+            Training
+          </button>
+        </div>
       </div>
 
       {/* New Entry Button (only for diary tab) */}
-      {!isCollapsed && activeTab === 'diary' && (
+      {activeTab === 'diary' && (
         <div className="p-4 border-b border-gray-200">
           {showDatePicker ? (
             <div className="space-y-2">
@@ -183,28 +215,54 @@ export function DiaryList({ onCollapsedChange, activeTab = 'diary', onTabChange 
       )}
 
       {/* Content area */}
-      {!isCollapsed && (
-        <div className="flex-1 overflow-y-auto">
-          {activeTab === 'diary' ? (
-            // Diary Calendar
-            diaries.length === 0 ? (
-              <div className="p-4 text-center text-gray-500">
-                <BookOpen className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-                <p>No diary entries yet</p>
-              </div>
-            ) : (
-              <Calendar
-                markedDates={diaries.map(d => d.date)}
-                selectedDate={selectedDate}
-                onSelectDate={selectDiary}
-              />
-            )
+      <div className="flex-1 overflow-y-auto">
+        {activeTab === 'diary' && (
+          diaries.length === 0 ? (
+            <div className="p-4 text-center text-gray-500">
+              <BookOpen className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+              <p>No diary entries yet</p>
+            </div>
           ) : (
-            // Archive List
-            <ArchiveList />
-          )}
-        </div>
-      )}
+            <Calendar
+              markedDates={diaries.map(d => d.date)}
+              selectedDate={selectedDate}
+              onSelectDate={selectDiary}
+            />
+          )
+        )}
+        {activeTab === 'archive' && <ArchiveList />}
+        {activeTab === 'training' && <TrainingList />}
+      </div>
     </div>
+  );
+}
+
+function CollapsedTab({
+  icon,
+  label,
+  active,
+  activeColor,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  active: boolean;
+  activeColor: string; // e.g. "text-blue-700 bg-blue-50 border-l-blue-600"
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      aria-pressed={active}
+      className={`flex items-center justify-center py-4 border-l-2 transition-colors ${
+        active
+          ? activeColor
+          : 'text-gray-500 hover:bg-gray-50 border-l-transparent'
+      }`}
+    >
+      {icon}
+    </button>
   );
 }

@@ -3,6 +3,7 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
 import { useDiaryContext } from '@/contexts/DiaryContext';
 import { Eye } from 'lucide-react';
 
@@ -36,7 +37,7 @@ export function MarkdownPreview() {
           <p className="text-gray-400 italic">Nothing to preview yet...</p>
         ) : (
           <article className="prose prose-sm prose-slate max-w-none prose-headings:font-semibold prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
               {previewContent}
             </ReactMarkdown>
           </article>
