@@ -78,3 +78,25 @@ export async function writeTrainingDay(
   }
   await fs.writeFile(filePath, content, 'utf-8');
 }
+
+/**
+ * Create a new training day file from a template. Refuses to overwrite an
+ * existing day (that's `writeTrainingDay`'s job).
+ */
+export async function createTrainingDay(
+  dateStr: string,
+  content: string,
+): Promise<void> {
+  validateDate(dateStr);
+  const filePath = path.join(TRAINING_LOG_PATH, `${dateStr}.md`);
+  validatePath(filePath);
+  let exists = false;
+  try {
+    await fs.access(filePath);
+    exists = true;
+  } catch {
+    exists = false;
+  }
+  if (exists) throw new Error('Training day already exists');
+  await fs.writeFile(filePath, content, 'utf-8');
+}

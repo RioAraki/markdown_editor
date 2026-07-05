@@ -22,6 +22,7 @@ import {
   exerciseName,
 } from '@/types/training';
 import { parsePlannedSet } from '@/lib/trainingParser';
+import { TodayPicker } from './training/TodayPicker';
 import { SetChip } from './training/SetChip';
 import { ExerciseNote } from './training/ExerciseNote';
 import { usePullToRefresh } from './training/usePullToRefresh';
@@ -201,6 +202,7 @@ export function TrainingEditor() {
                 Loading...
               </div>
             )}
+            {!isLoading && <TodayPicker />}
             {!isLoading && days.length === 0 && (
               <div className="text-center text-stone-500 text-sm py-12 px-4">
                 还没有训练记录。先在{' '}
@@ -454,6 +456,8 @@ function BlockRow({
 
   if (block.kind !== 'other') return null;
   if (block.raw.trim() === '') return null;
+  // Hide the session marker comment (<!-- session: id -->) from the UI.
+  if (block.raw.trim().startsWith('<!--')) return null;
   return (
     <p className="text-xs text-stone-400 italic py-1 select-text">{block.raw}</p>
   );
