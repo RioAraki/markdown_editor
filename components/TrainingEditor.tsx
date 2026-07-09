@@ -96,14 +96,11 @@ export function TrainingEditor() {
     if (target) {
       target.scrollIntoView({ block: 'start', behavior: 'auto' });
     } else {
-      const pastDates = days.filter((d) => d.dateStr <= today);
-      const fallback = pastDates[pastDates.length - 1] ?? days[0];
-      if (fallback) {
-        const el = scrollContainerRef.current.querySelector<HTMLElement>(
-          `[data-day-card="${fallback.dateStr}"]`,
-        );
-        el?.scrollIntoView({ block: 'start', behavior: 'auto' });
-      }
+      // No record for today: the TodayPicker ("今天练什么?" create prompt) is
+      // rendered at the very top of the scroll container. Land at the top so
+      // it's visible — don't jump to the latest past day, which would push the
+      // picker thousands of pixels off-screen above the viewport.
+      scrollContainerRef.current.scrollTo({ top: 0, behavior: 'auto' });
     }
     hasScrolledRef.current = true;
   }, [days, isLoading, today]);
