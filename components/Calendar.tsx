@@ -1,7 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+
+/** Parse a YYYY-MM-DD key into the first of that month, in local time. */
+function monthOf(dateKey: string): Date {
+  const [year, month] = dateKey.split('-').map(Number);
+  return new Date(year, month - 1, 1);
+}
 
 interface CalendarProps {
   markedDates: string[]; // Array of dates in YYYY-MM-DD format
@@ -10,7 +16,25 @@ interface CalendarProps {
 }
 
 export function Calendar({ markedDates, selectedDate, onSelectDate }: CalendarProps) {
-  const [currentMonth, setCurrentMonth] = useState(new Date());
+  // Open on the selected entry's month, not today's — this component is unmounted
+  // whenever the sidebar switches tabs, and a plain `new Date()` default would
+  // throw the user back to the current month every time they came back.
+  const [currentMonth, setCurrentMonth] = useState(() =>
+    selectedDate ? monthOf(selectedDate) : new Date()
+  );
+
+  // Follow the selection when it lands outside the month on screen (initial
+  // auto-select, or creating an entry in another month). Deliberately keyed on
+  // selectedDate alone: browsing months with the arrows must not snap back.
+  useEffect(() => {
+    if (!selectedDate) return;
+    const target = monthOf(selectedDate);
+    setCurrentMonth(prev =>
+      prev.getFullYear() === target.getFullYear() && prev.getMonth() === target.getMonth()
+        ? prev
+        : target
+    );
+  }, [selectedDate]);
 
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear();

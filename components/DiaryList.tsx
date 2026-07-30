@@ -46,7 +46,11 @@ export function DiaryList({
     }
   };
 
-  if (isLoading) {
+  // Only blank the sidebar while there is genuinely nothing to show. `isLoading`
+  // from the context also covers loading a single day's content, and tearing the
+  // sidebar down for that would unmount the Calendar — remounting it resets the
+  // month the user is browsing back to today. Same guard as SteamList.
+  if (isLoading && diaries.length === 0) {
     return (
       <div className="p-4 h-full flex items-center justify-center">
         <LoadingSpinner />
