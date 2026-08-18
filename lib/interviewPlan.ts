@@ -1,0 +1,99 @@
+import fs from 'fs/promises';
+import path from 'path';
+import { PlanDayLite, PlanTaskLite } from '@/types/interview';
+
+/**
+ * Server-side access to the diary app's interview plan.
+ *
+ * The plan (phases, weeks, day templates, phase × weekday schedule) lives in
+ * the diary repo so the read-only renderer owns it; this editor only reads it
+ * to scaffold a day's log file and to tell the user what today is supposed to
+ * look like.
+ */
+
+const INTERVIEW_LOG_PATH =
+  process.env.INTERVIEW_LOG_PATH || 'D:\\diary\\data\\interview\\log';
+const PLAN_PATH =
+  process.env.INTERVIEW_PLAN_PATH ||
+  path.join(path.dirname(INTERVIEW_LOG_PATH), 'plan.json');
+
+const WEEKDAYS_CN = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+interface RawWeek {
+  n: number;
+  start: string;
+  end: string;
+  phase: string;
+  theme: string;
+  goals?: string[];
+  milestone?: string;
+}
+
+interface RawPlan {
+  meta?: { startDate?: string; endDate?: string; weeks?: number };
+  trackTypes?: Record<string, { emoji: string; label: string }>;
+  weeks?: RawWeek[];
+  templates?: (PlanDayLite & { id: string })[];
+  schedule?: Record<string, Record<string, string>>;
+  dayOverrides?: Record<string, PlanDayLite>;
+}
+
+export async function loadPlan(): Promise<RawPlan> {
+  try {
+    const raw = await fs.readFile(PLAN_PATH, 'utf-8');
+    return JSON.parse(raw) as RawPlan;
+  } catch {
+    return {};
+  }
+}
+
+export function weekOf(plan: RawPlan, date: string): RawWeek | undefined {
+  return (plan.weeks ?? []).find((w) => date >= w.start && date <= w.end);
+}
+
+/**
+ * The prescription for a date: an explicit day override wins, otherwise
+ * phase × weekday → template.
+ */
+export function resolveDayPlan(
+  plan: RawPlan,
+  date: string,
+): PlanDayLite | undefined {
+  const override = plan.dayOverrides?.[date];
+  if (override) return override;
+
+  const week = weekOf(plan, date);
+  if (!week) return undefined;
+  const weekday = new Date(`${date}T00:00:00`).getDay();
+  const templateId = plan.schedule?.[week.phase]?.[String(weekday)];
+  if (!templateId) return undefined;
+  return (plan.templates ?? []).find((t) => t.id === templateId);
+}
+
+/** Build the markdown scaffold for a day, mirroring the training log format. */
+export function buildDayMarkdown(day: PlanDayLite, dateStr: string): string {
+  const weekday = WEEKDAYS_CN[new Date(`${dateStr}T00:00:00`).getDay()];
+  const lines: string[] = [];
+  lines.push(`# ${dateStr} ${weekday} · ${day.title}`);
+  if (day.id) lines.push(`<!-- session: ${day.id} -->`);
+  lines.push('');
+  for (const task of day.tasks ?? []) {
+    lines.push(`- ${taskLabel(task)}`);
+    for (let i = 0; i < Math.max(1, task.units); i++) lines.push('  - [ ] ');
+  }
+  lines.push('');
+  lines.push('> 笔记:');
+  lines.push('');
+  return lines.join('\n');
+}
+
+/**
+ * The log line for a task. Kept stable because the diary renderer matches
+ * plan tasks to log items by checking that the line contains the task name.
+ */
+export function taskLabel(task: PlanTaskLite): string {
+  const parts = [task.name];
+  if (task.target) parts.push(task.target);
+  if (task.minutes) parts.push(`${task.minutes}min`);
+  return parts.join(' · ');
+}

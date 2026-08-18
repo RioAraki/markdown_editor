@@ -8,8 +8,10 @@ import { MarkdownPreview } from "@/components/MarkdownPreview";
 import { ArchiveEditor } from "@/components/ArchiveEditor";
 import { ArchivePreview } from "@/components/ArchivePreview";
 import { TrainingEditor } from "@/components/TrainingEditor";
+import { InterviewEditor } from "@/components/InterviewEditor";
 import { ArchiveProvider } from "@/contexts/ArchiveContext";
 import { TrainingProvider } from "@/contexts/TrainingContext";
+import { InterviewProvider } from "@/contexts/InterviewContext";
 
 const SIDEBAR_COLLAPSED_KEY = 'diary-sidebar-collapsed';
 const ACTIVE_TAB_KEY = 'sidebar-active-tab';
@@ -26,7 +28,12 @@ export default function Home() {
       setCollapsed(true);
     }
     const storedTab = localStorage.getItem(ACTIVE_TAB_KEY);
-    if (storedTab === 'diary' || storedTab === 'archive' || storedTab === 'training') {
+    if (
+      storedTab === 'diary' ||
+      storedTab === 'archive' ||
+      storedTab === 'training' ||
+      storedTab === 'interview'
+    ) {
       setActiveTab(storedTab);
     }
   }, []);
@@ -52,6 +59,9 @@ export default function Home() {
   } else if (activeTab === 'archive') {
     middle = <ArchiveEditor />;
     right = <ArchivePreview />;
+  } else if (activeTab === 'interview') {
+    middle = <InterviewEditor />;
+    right = undefined;
   } else {
     middle = <TrainingEditor />;
     right = undefined;
@@ -60,20 +70,22 @@ export default function Home() {
   return (
     <ArchiveProvider>
       <TrainingProvider>
-        <ThreeColumnLayout
-          left={
-            <DiaryList
-              collapsed={collapsed}
-              onToggleCollapsed={toggleCollapsed}
-              activeTab={activeTab}
-              onTabChange={handleTabChange}
-            />
-          }
-          middle={middle}
-          right={right}
-          leftCollapsed={collapsed}
-          onToggleLeft={toggleCollapsed}
-        />
+        <InterviewProvider>
+          <ThreeColumnLayout
+            left={
+              <DiaryList
+                collapsed={collapsed}
+                onToggleCollapsed={toggleCollapsed}
+                activeTab={activeTab}
+                onTabChange={handleTabChange}
+              />
+            }
+            middle={middle}
+            right={right}
+            leftCollapsed={collapsed}
+            onToggleLeft={toggleCollapsed}
+          />
+        </InterviewProvider>
       </TrainingProvider>
     </ArchiveProvider>
   );

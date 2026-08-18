@@ -5,12 +5,13 @@ import { useDiaryContext } from '@/contexts/DiaryContext';
 import { getTodayDate } from '@/lib/dateUtils';
 import { Button } from './ui/Button';
 import { LoadingSpinner } from './ui/LoadingSpinner';
-import { Plus, BookOpen, ChevronLeft, ChevronRight, Archive, Dumbbell } from 'lucide-react';
+import { Plus, BookOpen, ChevronLeft, ChevronRight, Archive, Dumbbell, Target } from 'lucide-react';
 import { Calendar } from './Calendar';
 import { ArchiveList } from './ArchiveList';
 import { TrainingList } from './TrainingList';
+import { InterviewList } from './InterviewList';
 
-export type SidebarTab = 'diary' | 'archive' | 'training';
+export type SidebarTab = 'diary' | 'archive' | 'training' | 'interview';
 
 interface DiaryListProps {
   collapsed?: boolean;
@@ -92,6 +93,13 @@ export function DiaryList({
           activeColor="text-stone-900 bg-stone-100 border-l-stone-800"
           onClick={() => onTabChange?.('training')}
         />
+        <CollapsedTab
+          icon={<Target className="w-5 h-5" />}
+          label="Interview"
+          active={activeTab === 'interview'}
+          activeColor="text-indigo-700 bg-indigo-50 border-l-indigo-600"
+          onClick={() => onTabChange?.('interview')}
+        />
       </div>
     );
   }
@@ -121,12 +129,19 @@ export function DiaryList({
                   Training Log
                 </>
               )}
+              {activeTab === 'interview' && (
+                <>
+                  <Target className="w-5 h-5 mr-2 text-indigo-600" />
+                  Interview Prep
+                </>
+              )}
             </h2>
             <p className="text-sm text-blue-600 mt-1">
               {activeTab === 'diary' &&
                 `${diaries.length} ${diaries.length === 1 ? 'entry' : 'entries'}`}
               {activeTab === 'archive' && 'Saved drafts'}
               {activeTab === 'training' && 'Daily check-ins'}
+              {activeTab === 'interview' && '12-week job hunt plan'}
             </p>
           </div>
           <button
@@ -138,41 +153,36 @@ export function DiaryList({
           </button>
         </div>
 
-        {/* Tab buttons */}
+        {/* Tab buttons — icon over label so four modes fit the sidebar width */}
         <div className="flex border-t border-blue-100">
-          <button
+          <TabButton
+            icon={<BookOpen className="w-4 h-4" />}
+            label="Diary"
+            active={activeTab === 'diary'}
+            activeColor="text-blue-700 bg-white border-blue-600"
             onClick={() => onTabChange?.('diary')}
-            className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${
-              activeTab === 'diary'
-                ? 'text-blue-700 bg-white border-b-2 border-blue-600'
-                : 'text-blue-600 hover:bg-blue-50'
-            }`}
-          >
-            <BookOpen className="w-4 h-4 inline mr-1" />
-            Diary
-          </button>
-          <button
+          />
+          <TabButton
+            icon={<Archive className="w-4 h-4" />}
+            label="Archive"
+            active={activeTab === 'archive'}
+            activeColor="text-amber-700 bg-white border-amber-600"
             onClick={() => onTabChange?.('archive')}
-            className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${
-              activeTab === 'archive'
-                ? 'text-amber-700 bg-white border-b-2 border-amber-600'
-                : 'text-blue-600 hover:bg-blue-50'
-            }`}
-          >
-            <Archive className="w-4 h-4 inline mr-1" />
-            Archive
-          </button>
-          <button
+          />
+          <TabButton
+            icon={<Dumbbell className="w-4 h-4" />}
+            label="Training"
+            active={activeTab === 'training'}
+            activeColor="text-stone-900 bg-white border-stone-800"
             onClick={() => onTabChange?.('training')}
-            className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${
-              activeTab === 'training'
-                ? 'text-stone-900 bg-white border-b-2 border-stone-800'
-                : 'text-blue-600 hover:bg-blue-50'
-            }`}
-          >
-            <Dumbbell className="w-4 h-4 inline mr-1" />
-            Training
-          </button>
+          />
+          <TabButton
+            icon={<Target className="w-4 h-4" />}
+            label="Prep"
+            active={activeTab === 'interview'}
+            activeColor="text-indigo-700 bg-white border-indigo-600"
+            onClick={() => onTabChange?.('interview')}
+          />
         </div>
       </div>
 
@@ -236,8 +246,39 @@ export function DiaryList({
         )}
         {activeTab === 'archive' && <ArchiveList />}
         {activeTab === 'training' && <TrainingList />}
+        {activeTab === 'interview' && <InterviewList />}
       </div>
     </div>
+  );
+}
+
+function TabButton({
+  icon,
+  label,
+  active,
+  activeColor,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  active: boolean;
+  activeColor: string; // e.g. "text-blue-700 bg-white border-blue-600"
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={label}
+      aria-pressed={active}
+      className={`flex-1 min-w-0 px-1 py-1.5 flex flex-col items-center gap-0.5 border-b-2 text-[11px] font-medium transition-colors ${
+        active
+          ? activeColor
+          : 'text-blue-600 hover:bg-blue-50 border-transparent'
+      }`}
+    >
+      {icon}
+      <span className="truncate w-full text-center">{label}</span>
+    </button>
   );
 }
 
