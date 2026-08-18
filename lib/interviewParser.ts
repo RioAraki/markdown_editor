@@ -137,7 +137,32 @@ export function parseInterviewDayDoc(
     i++;
   }
 
-  return { dateStr, filename, heading, preamble, blocks, trailing: '' };
+  return {
+    dateStr,
+    filename,
+    heading,
+    preamble,
+    blocks,
+    trailing: '',
+    itemsByTask: parseItemBinding(content),
+  };
+}
+
+const BIND_RE = /<!--\s*items:\s*([^>]*?)\s*-->/i;
+
+/** Read the `<!-- items: 任务名=item-id; … -->` marker. */
+export function parseItemBinding(content: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const m = BIND_RE.exec(content);
+  if (!m) return out;
+  for (const pair of m[1].split(';')) {
+    const eq = pair.indexOf('=');
+    if (eq < 0) continue;
+    const task = pair.slice(0, eq).trim();
+    const id = pair.slice(eq + 1).trim();
+    if (task && id) out[task] = id;
+  }
+  return out;
 }
 
 function parseNotesBody(

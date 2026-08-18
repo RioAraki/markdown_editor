@@ -69,6 +69,11 @@ export interface InterviewDayDoc {
   preamble: string;
   blocks: InterviewBlock[];
   trailing: string;
+  /**
+   * Task name → inventory item id, read from the `<!-- items: … -->` marker in
+   * the preamble. Read-only here — the marker line itself round-trips verbatim.
+   */
+  itemsByTask: Record<string, string>;
 }
 
 /** Parse "- name: note" sub-bullet. Returns null if not matching. */
@@ -106,6 +111,35 @@ export interface PlanDayLite {
   tasks?: PlanTaskLite[];
 }
 
+/** An inventory item auto-picked for one of today's task slots. */
+export interface SuggestedItem {
+  id: string;
+  title: string;
+  domainLabel: string;
+  moduleLabel: string;
+  touches: number;
+  how?: string;
+  test?: string;
+}
+
+/** A pickable inventory item, for swapping the suggestion manually. */
+export interface ItemChoiceLite {
+  id: string;
+  title: string;
+  domainId: string;
+  moduleLabel: string;
+  touches: number;
+  mastered: boolean;
+}
+
+export interface DomainLite {
+  id: string;
+  emoji: string;
+  label: string;
+  track: string;
+  rolling?: boolean;
+}
+
 export interface TodayPlanResponse {
   today: string;
   /** Prescription resolved from phase × weekday (or a date override). */
@@ -114,4 +148,22 @@ export interface TodayPlanResponse {
   templates: PlanDayLite[];
   week?: { n: number; theme: string; phase: string };
   trackTypes: Record<string, { emoji: string; label: string }>;
+  /** Task name → auto-picked inventory item. */
+  suggestedItems: Record<string, SuggestedItem>;
+  domains: DomainLite[];
+  /** Everything pickable, so a slot can be swapped without another round-trip. */
+  choices: ItemChoiceLite[];
+}
+
+/** What the client sends when creating a day with its chosen items. */
+export interface CreateDayRequest {
+  templateId?: string;
+  /** Task name → inventory item id. */
+  items?: Record<string, string>;
+}
+
+export interface MasteryEntryLite {
+  status: 'mastered';
+  at: string;
+  note?: string;
 }

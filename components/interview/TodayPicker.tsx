@@ -1,10 +1,21 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { CalendarPlus, ChevronDown, Loader2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  CalendarPlus,
+  ChevronDown,
+  Loader2,
+  RefreshCw,
+  Search,
+} from 'lucide-react';
 import { useInterview } from '@/contexts/InterviewContext';
 import { getTodayDate } from '@/lib/dateUtils';
-import { PlanDayLite, TodayPlanResponse } from '@/types/interview';
+import {
+  ItemChoiceLite,
+  PlanDayLite,
+  PlanTaskLite,
+  TodayPlanResponse,
+} from '@/types/interview';
 
 export function TodayPicker() {
   const { days, refresh } = useInterview();
@@ -12,8 +23,11 @@ export function TodayPicker() {
   const todayExists = days.some((d) => d.dateStr === today);
 
   const [data, setData] = useState<TodayPlanResponse | null>(null);
-  const [overrideId, setOverrideId] = useState<string | undefined>();
-  const [showAll, setShowAll] = useState(false);
+  const [overrideTemplate, setOverrideTemplate] = useState<string | undefined>();
+  const [showTemplates, setShowTemplates] = useState(false);
+  /** Task name → chosen item id. Starts from the server's suggestions. */
+  const [picked, setPicked] = useState<Record<string, string>>({});
+  const [swapping, setSwapping] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,7 +37,13 @@ export function TodayPicker() {
     fetch('/api/interview/today')
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((d: TodayPlanResponse) => {
-        if (!cancelled) setData(d);
+        if (cancelled) return;
+        setData(d);
+        const init: Record<string, string> = {};
+        for (const [task, item] of Object.entries(d.suggestedItems ?? {})) {
+          init[task] = item.id;
+        }
+        setPicked(init);
       })
       .catch(() => {});
     return () => {
@@ -31,11 +51,28 @@ export function TodayPicker() {
     };
   }, [todayExists]);
 
-  if (todayExists || !data) return null;
+  const chosen: PlanDayLite | undefined = overrideTemplate
+    ? data?.templates.find((t) => t.id === overrideTemplate)
+    : data?.suggestion;
 
-  const chosen: PlanDayLite | undefined = overrideId
-    ? data.templates.find((t) => t.id === overrideId)
-    : data.suggestion;
+  // Look up any item by id, including ones swapped in manually.
+  const choiceById = useMemo(() => {
+    const m = new Map<string, ItemChoiceLite>();
+    for (const c of data?.choices ?? []) m.set(c.id, c);
+    return m;
+  }, [data]);
+
+  const domainByTrack = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const d of data?.domains ?? []) {
+      const arr = m.get(d.track) ?? [];
+      arr.push(d.id);
+      m.set(d.track, arr);
+    }
+    return m;
+  }, [data]);
+
+  if (todayExists || !data) return null;
 
   const create = async () => {
     setCreating(true);
@@ -44,7 +81,10 @@ export function TodayPicker() {
       const res = await fetch(`/api/interview/${today}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(overrideId ? { templateId: overrideId } : {}),
+        body: JSON.stringify({
+          ...(overrideTemplate ? { templateId: overrideTemplate } : {}),
+          items: picked,
+        }),
       });
       if (!res.ok) throw new Error();
       await refresh();
@@ -74,42 +114,45 @@ export function TodayPicker() {
         <p className="text-xs text-stone-500 mt-0.5">
           {today} 还没有记录
           {data.week && ` · W${data.week.n} ${data.week.theme}`}
+          {chosen && ` · ${chosen.title}`}
         </p>
       </header>
 
-      <div className="p-4">
-        {chosen ? (
-          <div className="rounded-lg border border-indigo-200 bg-indigo-50/40 px-3 py-2.5">
-            <div className="flex items-baseline justify-between gap-2 flex-wrap">
-              <span className="text-sm font-medium text-stone-800">
-                {chosen.title}
-              </span>
-              {!overrideId && (
-                <span className="text-[11px] text-indigo-600 font-medium shrink-0">
-                  计划安排
-                </span>
-              )}
+      <div className="p-4 space-y-3">
+        {chosen?.tasks && chosen.tasks.length > 0 ? (
+          <>
+            <p className="text-xs text-stone-500">
+              已按清单自动排好，每项都能换。
+            </p>
+            <div className="space-y-2">
+              {chosen.tasks.map((task) => (
+                <SlotRow
+                  key={task.name}
+                  task={task}
+                  emoji={data.trackTypes[task.track]?.emoji ?? '·'}
+                  trackLabel={data.trackTypes[task.track]?.label ?? task.track}
+                  pickedId={picked[task.name]}
+                  choice={
+                    picked[task.name]
+                      ? choiceById.get(picked[task.name])
+                      : undefined
+                  }
+                  suggested={data.suggestedItems?.[task.name]}
+                  isSwapping={swapping === task.name}
+                  onToggleSwap={() =>
+                    setSwapping(swapping === task.name ? null : task.name)
+                  }
+                  onPick={(id) => {
+                    setPicked((p) => ({ ...p, [task.name]: id }));
+                    setSwapping(null);
+                  }}
+                  candidates={(data.choices ?? []).filter((c) =>
+                    (domainByTrack.get(task.track) ?? []).includes(c.domainId),
+                  )}
+                />
+              ))}
             </div>
-            {chosen.focus && (
-              <p className="text-xs text-stone-500 mt-0.5">{chosen.focus}</p>
-            )}
-            {chosen.tasks && chosen.tasks.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {chosen.tasks.map((t, i) => (
-                  <span
-                    key={i}
-                    className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded border border-stone-200 bg-white text-stone-600"
-                  >
-                    <span>{data.trackTypes[t.track]?.emoji ?? '·'}</span>
-                    {t.name}
-                    {t.target && (
-                      <span className="text-stone-400">· {t.target}</span>
-                    )}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
+          </>
         ) : (
           <p className="text-sm text-stone-500">
             今天不在 12 周计划期内，手动选一个模板。
@@ -120,25 +163,28 @@ export function TodayPicker() {
           <>
             <button
               type="button"
-              onClick={() => setShowAll((v) => !v)}
-              className="mt-3 inline-flex items-center gap-1 text-xs text-stone-500 hover:text-stone-800"
+              onClick={() => setShowTemplates((v) => !v)}
+              className="inline-flex items-center gap-1 text-xs text-stone-500 hover:text-stone-800"
             >
               <ChevronDown
-                className={`w-3.5 h-3.5 transition-transform ${showAll ? 'rotate-180' : ''}`}
+                className={`w-3.5 h-3.5 transition-transform ${showTemplates ? 'rotate-180' : ''}`}
               />
-              {showAll ? '收起' : '换一个模板'}
+              {showTemplates ? '收起' : '换一个日模板'}
             </button>
 
-            {showAll && (
-              <div className="mt-2 space-y-1.5">
+            {showTemplates && (
+              <div className="space-y-1.5">
                 {data.templates.map((t) => {
-                  const isSel = overrideId
-                    ? t.id === overrideId
+                  const isSel = overrideTemplate
+                    ? t.id === overrideTemplate
                     : t.id === data.suggestion?.id;
                   return (
                     <button
                       key={t.id}
-                      onClick={() => setOverrideId(t.id)}
+                      onClick={() => {
+                        setOverrideTemplate(t.id);
+                        setShowTemplates(false);
+                      }}
                       className={`w-full text-left px-3 py-2 rounded-lg border transition-colors ${
                         isSel
                           ? 'border-indigo-400 bg-indigo-50 ring-1 ring-indigo-300'
@@ -161,7 +207,7 @@ export function TodayPicker() {
           </>
         )}
 
-        <div className="mt-4 flex items-center gap-3">
+        <div className="flex items-center gap-3 pt-1">
           <button
             onClick={create}
             disabled={!chosen || creating}
@@ -178,5 +224,123 @@ export function TodayPicker() {
         </div>
       </div>
     </section>
+  );
+}
+
+function SlotRow({
+  task,
+  emoji,
+  trackLabel,
+  pickedId,
+  choice,
+  suggested,
+  isSwapping,
+  onToggleSwap,
+  onPick,
+  candidates,
+}: {
+  task: PlanTaskLite;
+  emoji: string;
+  trackLabel: string;
+  pickedId?: string;
+  choice?: ItemChoiceLite;
+  suggested?: { id: string; title: string; how?: string; touches: number };
+  isSwapping: boolean;
+  onToggleSwap: () => void;
+  onPick: (id: string) => void;
+  candidates: ItemChoiceLite[];
+}) {
+  const [q, setQ] = useState('');
+  const title =
+    choice?.title ?? (pickedId === suggested?.id ? suggested?.title : undefined);
+  const touches = choice?.touches ?? suggested?.touches ?? 0;
+
+  const filtered = useMemo(() => {
+    const pool = candidates.filter((c) => !c.mastered);
+    if (!q.trim()) return pool.slice(0, 40);
+    const k = q.trim().toLowerCase();
+    return pool.filter((c) => c.title.toLowerCase().includes(k)).slice(0, 40);
+  }, [candidates, q]);
+
+  return (
+    <div className="rounded-lg border border-stone-200 bg-stone-50/60">
+      <div className="px-3 py-2.5">
+        <div className="flex items-start gap-2">
+          <span className="text-base leading-none mt-0.5 shrink-0">{emoji}</span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span className="text-sm font-medium text-stone-800">
+                {task.name}
+              </span>
+              <span className="text-[11px] text-stone-400">
+                {trackLabel}
+                {task.target && ` · ${task.target}`}
+                {task.minutes ? ` · ${task.minutes}min` : ''}
+              </span>
+            </div>
+            {title ? (
+              <p className="text-xs text-stone-700 mt-0.5">
+                → {title}
+                {touches > 0 && (
+                  <span className="ml-1.5 text-[10px] text-amber-600">
+                    做过 {touches} 次
+                  </span>
+                )}
+              </p>
+            ) : (
+              <p className="text-xs text-stone-400 mt-0.5 italic">
+                这个领域的条目都掌握了，或清单里没有对应内容
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onToggleSwap}
+            className="shrink-0 inline-flex items-center gap-1 text-[11px] text-stone-500 hover:text-indigo-700 px-1.5 py-1 rounded hover:bg-white transition-colors"
+            title="换一个条目"
+          >
+            <RefreshCw className="w-3 h-3" />
+            换
+          </button>
+        </div>
+      </div>
+
+      {isSwapping && (
+        <div className="px-3 pb-3 border-t border-stone-200 pt-2">
+          <div className="relative mb-2">
+            <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-stone-400" />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              autoFocus
+              placeholder="搜索这个领域的条目…"
+              className="w-full pl-7 pr-2 py-1.5 text-xs border border-stone-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            />
+          </div>
+          <div className="max-h-52 overflow-y-auto space-y-0.5">
+            {filtered.length === 0 && (
+              <p className="text-xs text-stone-400 py-2 text-center">没有匹配的条目</p>
+            )}
+            {filtered.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => onPick(c.id)}
+                className={`w-full text-left px-2 py-1.5 rounded text-xs transition-colors ${
+                  c.id === pickedId
+                    ? 'bg-indigo-50 text-indigo-800 ring-1 ring-indigo-300'
+                    : 'hover:bg-white text-stone-700'
+                }`}
+              >
+                <span className="block truncate">{c.title}</span>
+                <span className="block text-[10px] text-stone-400">
+                  {c.moduleLabel}
+                  {c.touches > 0 && ` · 做过 ${c.touches} 次`}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

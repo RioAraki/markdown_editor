@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import {
   AlertCircle,
+  Award,
   Check,
   Loader2,
   RefreshCw,
@@ -48,6 +49,10 @@ interface Handlers {
     name: string,
     note: string,
   ) => void;
+  /** Item id bound to this task, if the day was created with inventory binding. */
+  itemsByTask: Record<string, string>;
+  mastery: Record<string, { status: 'mastered'; at: string; note?: string }>;
+  onToggleMastery: (itemId: string, mastered: boolean) => void;
 }
 
 export function InterviewEditor() {
@@ -58,6 +63,8 @@ export function InterviewEditor() {
     lastSaved,
     hasUnsavedChanges,
     error,
+    mastery,
+    toggleMastery,
     toggleTaskStatus,
     toggleUnitStatus,
     updateNoteEntry,
@@ -193,6 +200,9 @@ export function InterviewEditor() {
                 key={day.dateStr}
                 day={day}
                 isToday={day.dateStr === today}
+                itemsByTask={day.itemsByTask}
+                mastery={mastery}
+                onToggleMastery={toggleMastery}
                 onToggleTaskStatus={toggleTaskStatus}
                 onToggleUnitStatus={toggleUnitStatus}
                 onUpdateNoteEntry={updateNoteEntry}
@@ -209,6 +219,9 @@ export function InterviewEditor() {
 function DayCard({
   day,
   isToday,
+  itemsByTask,
+  mastery,
+  onToggleMastery,
   onToggleTaskStatus,
   onToggleUnitStatus,
   onUpdateNoteEntry,
@@ -277,6 +290,9 @@ function DayCard({
                   ? (noteByName.get(taskName(block.label)) ?? '')
                   : ''
               }
+              itemsByTask={itemsByTask}
+              mastery={mastery}
+              onToggleMastery={onToggleMastery}
               onToggleTaskStatus={onToggleTaskStatus}
               onToggleUnitStatus={onToggleUnitStatus}
               onUpdateNoteEntry={onUpdateNoteEntry}
@@ -315,12 +331,48 @@ function DayCard({
   );
 }
 
+/** "标记已掌握" toggle — the only way an inventory item reaches 已掌握. */
+function MasteryToggle({
+  itemId,
+  mastery,
+  onToggle,
+}: {
+  itemId?: string;
+  mastery: Record<string, { status: 'mastered'; at: string; note?: string }>;
+  onToggle: (itemId: string, mastered: boolean) => void;
+}) {
+  if (!itemId) return null;
+  const done = !!mastery[itemId];
+  return (
+    <button
+      type="button"
+      onClick={() => onToggle(itemId, !done)}
+      title={
+        done
+          ? `已掌握 · ${mastery[itemId].at}（点击取消）`
+          : '确认已掌握——标准是能不看稿讲出来'
+      }
+      className={`mt-2 inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border transition-colors ${
+        done
+          ? 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100'
+          : 'bg-white border-stone-300 text-stone-500 hover:border-emerald-400 hover:text-emerald-700'
+      }`}
+    >
+      <Award className="w-3 h-3" />
+      {done ? `已掌握 · ${mastery[itemId].at.slice(5)}` : '标记已掌握'}
+    </button>
+  );
+}
+
 function BlockRow({
   block,
   dateStr,
   blockIdx,
   notesBlockIdx,
   noteValue,
+  itemsByTask,
+  mastery,
+  onToggleMastery,
   onToggleTaskStatus,
   onToggleUnitStatus,
   onUpdateNoteEntry,
@@ -353,6 +405,13 @@ function BlockRow({
             {block.label}
           </span>
         </label>
+        <div className="flex items-start gap-2 flex-wrap">
+          <MasteryToggle
+            itemId={itemsByTask[name]}
+            mastery={mastery}
+            onToggle={onToggleMastery}
+          />
+        </div>
         {notesBlockIdx >= 0 && (
           <TaskNote
             value={noteValue}
@@ -402,6 +461,11 @@ function BlockRow({
             />
           ))}
         </div>
+        <MasteryToggle
+          itemId={itemsByTask[name]}
+          mastery={mastery}
+          onToggle={onToggleMastery}
+        />
         {notesBlockIdx >= 0 && (
           <TaskNote
             value={noteValue}

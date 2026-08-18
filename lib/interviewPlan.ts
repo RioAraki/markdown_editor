@@ -70,15 +70,36 @@ export function resolveDayPlan(
   return (plan.templates ?? []).find((t) => t.id === templateId);
 }
 
-/** Build the markdown scaffold for a day, mirroring the training log format. */
-export function buildDayMarkdown(day: PlanDayLite, dateStr: string): string {
+/** Task name → inventory item id, for the day's `<!-- items: … -->` marker. */
+export type ItemBinding = Record<string, { id: string; title: string }>;
+
+/**
+ * Build the markdown scaffold for a day.
+ *
+ * When `binding` is given, each task label carries the concrete inventory item
+ * ("刷题 · 数组/双指针 · 2 题 · 45min") and a single marker line records the
+ * task→item mapping so coverage can be computed later.
+ */
+export function buildDayMarkdown(
+  day: PlanDayLite,
+  dateStr: string,
+  binding: ItemBinding = {},
+): string {
   const weekday = WEEKDAYS_CN[new Date(`${dateStr}T00:00:00`).getDay()];
   const lines: string[] = [];
   lines.push(`# ${dateStr} ${weekday} · ${day.title}`);
   if (day.id) lines.push(`<!-- session: ${day.id} -->`);
+
+  const bound = Object.entries(binding).filter(([, v]) => v?.id);
+  if (bound.length > 0) {
+    lines.push(
+      `<!-- items: ${bound.map(([task, v]) => `${task}=${v.id}`).join('; ')} -->`,
+    );
+  }
+
   lines.push('');
   for (const task of day.tasks ?? []) {
-    lines.push(`- ${taskLabel(task)}`);
+    lines.push(`- ${taskLabel(task, binding[task.name]?.title)}`);
     for (let i = 0; i < Math.max(1, task.units); i++) lines.push('  - [ ] ');
   }
   lines.push('');
@@ -88,11 +109,14 @@ export function buildDayMarkdown(day: PlanDayLite, dateStr: string): string {
 }
 
 /**
- * The log line for a task. Kept stable because the diary renderer matches
- * plan tasks to log items by checking that the line contains the task name.
+ * The log line for a task: `任务名 · 具体条目 · 目标 · 时长`.
+ *
+ * The task name stays first because the diary renderer matches plan tasks to
+ * log items by prefix — inserting the item title after it keeps that working.
  */
-export function taskLabel(task: PlanTaskLite): string {
+export function taskLabel(task: PlanTaskLite, itemTitle?: string): string {
   const parts = [task.name];
+  if (itemTitle) parts.push(itemTitle);
   if (task.target) parts.push(task.target);
   if (task.minutes) parts.push(`${task.minutes}min`);
   return parts.join(' · ');

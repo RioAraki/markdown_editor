@@ -4,8 +4,15 @@ import {
   readInterviewDay,
   writeInterviewDay,
 } from '@/lib/interviewFileSystem';
-import { buildDayMarkdown, loadPlan, resolveDayPlan } from '@/lib/interviewPlan';
 import {
+  ItemBinding,
+  buildDayMarkdown,
+  loadPlan,
+  resolveDayPlan,
+} from '@/lib/interviewPlan';
+import { flattenInventory, loadInventory, loadMastery } from '@/lib/interviewInventory';
+import {
+  CreateDayRequest,
   InterviewDayContentResponse,
   SaveInterviewRequest,
 } from '@/types/interview';
@@ -80,8 +87,9 @@ export async function PUT(req: Request, context: RouteContext) {
 }
 
 /**
- * Create a day file. Body: `{ templateId? }` — omitted means "use whatever the
- * plan prescribes for this date". Refuses to overwrite an existing day.
+ * Create a day file. Body: `{ templateId?, items? }` — `templateId` omitted
+ * means "use whatever the plan prescribes for this date"; `items` maps a task
+ * name to the inventory item chosen for it. Refuses to overwrite an existing day.
  */
 export async function POST(req: Request, context: RouteContext) {
   try {
@@ -89,7 +97,7 @@ export async function POST(req: Request, context: RouteContext) {
     if (!DATE_RE.test(date)) {
       return NextResponse.json({ error: 'Invalid date format' }, { status: 400 });
     }
-    const body: { templateId?: string } = await req.json().catch(() => ({}));
+    const body: CreateDayRequest = await req.json().catch(() => ({}));
     const plan = await loadPlan();
 
     const day = body.templateId
@@ -103,7 +111,27 @@ export async function POST(req: Request, context: RouteContext) {
       );
     }
 
-    const content = buildDayMarkdown(day, date);
+    // Resolve chosen item ids to titles so the log line reads properly.
+    let binding: ItemBinding = {};
+    if (body.items && Object.keys(body.items).length > 0) {
+      const [inventory, mastery] = await Promise.all([
+        loadInventory(),
+        loadMastery(),
+      ]);
+      const byId = new Map(
+        flattenInventory(inventory, {}, mastery).map((c) => [c.id, c]),
+      );
+      binding = Object.fromEntries(
+        Object.entries(body.items)
+          .map(([task, id]) => {
+            const c = byId.get(id);
+            return c ? [task, { id: c.id, title: c.title }] : null;
+          })
+          .filter((e): e is [string, { id: string; title: string }] => e !== null),
+      );
+    }
+
+    const content = buildDayMarkdown(day, date, binding);
     await createInterviewDay(date, content);
     const response: InterviewDayContentResponse = {
       dateStr: date,
