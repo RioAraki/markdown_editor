@@ -13,7 +13,12 @@ import {
 import { flattenInventory, loadInventory, loadMastery } from '@/lib/interviewInventory';
 import path from 'path';
 import fs from 'fs/promises';
-import { loadLeetCode } from '@shared/interview/load';
+import { loadLeetCode, loadQBank } from '@shared/interview/load';
+import { parseQuestionUnit, questionUnitText } from '@shared/interview/qbank';
+import {
+  parseQuestionDoc,
+  serializeQuestionDoc,
+} from '@shared/interview/qbankDoc';
 import {
   Attempt,
   LeetCodeLog,
@@ -111,6 +116,41 @@ async function reconcileLeetCodeLog(date: string, content: string) {
   await fs.writeFile(logPath, JSON.stringify(store, null, 2) + '\n', 'utf-8');
 }
 
+/**
+ * Make the qbank archive agree with what the day file says about redo flags.
+ *
+ * Split ownership: the archive owns your answer text (the day file never
+ * carries it), the day file owns the 待重做 marker and its one-line reason.
+ * Only the second half is reconciled here — same lesson as the LeetCode log,
+ * where an eager write and a debounced write could silently disagree.
+ */
+async function reconcileQBank(date: string, content: string) {
+  const claimed = new Map<string, { redo: boolean; reason: string }>();
+  for (const line of content.split(/\r?\n/)) {
+    const m = /^\s*-\s*\[.\]\s*(.*)$/.exec(line);
+    if (!m) continue;
+    const unit = parseQuestionUnit(m[1]);
+    if (unit) claimed.set(unit.id, { redo: unit.redo, reason: unit.note });
+  }
+  if (claimed.size === 0) return;
+
+  const dir = path.join(DATA_DIR, 'qbank');
+  for (const [id, want] of claimed) {
+    const file = path.join(dir, `${id}.md`);
+    const doc = await fs
+      .readFile(file, 'utf-8')
+      .then(parseQuestionDoc)
+      .catch(() => null);
+    // No archive file means nothing has been written for this question yet —
+    // a bare flag with no answer is not worth a file of its own.
+    if (!doc) continue;
+    if (!!doc.redo === want.redo && (doc.redoReason ?? '') === want.reason) continue;
+    doc.redo = want.redo;
+    doc.redoReason = want.redo ? want.reason || undefined : undefined;
+    await fs.writeFile(file, serializeQuestionDoc(doc), 'utf-8');
+  }
+}
+
 export async function PUT(req: Request, context: RouteContext) {
   try {
     const { date } = await context.params;
@@ -127,6 +167,9 @@ export async function PUT(req: Request, context: RouteContext) {
     await writeInterviewDay(date, body.content);
     await reconcileLeetCodeLog(date, body.content).catch((e) =>
       console.error('Failed to reconcile leetcode log:', e),
+    );
+    await reconcileQBank(date, body.content).catch((e) =>
+      console.error('Failed to reconcile qbank archive:', e),
     );
     const response: InterviewDayContentResponse = {
       dateStr: date,
@@ -204,6 +247,18 @@ export async function POST(req: Request, context: RouteContext) {
           .map((id) => byId.get(id))
           .filter((p): p is NonNullable<typeof p> => !!p)
           .map((p) => problemUnitText(p));
+      }
+    }
+
+    // 题库 slots name their concrete questions the same way 刷题 does.
+    if (body.questions && Object.keys(body.questions).length > 0) {
+      const { bank } = await loadQBank(DATA_DIR);
+      const byId = new Map(bank.questions.map((q) => [q.id, q]));
+      for (const [task, ids] of Object.entries(body.questions)) {
+        unitTexts[task] = ids
+          .map((id) => byId.get(id))
+          .filter((q): q is NonNullable<typeof q> => !!q)
+          .map((q) => questionUnitText(q));
       }
     }
 

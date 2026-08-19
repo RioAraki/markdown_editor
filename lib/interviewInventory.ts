@@ -22,6 +22,8 @@ export interface InvItem {
   title: string;
   how?: string;
   test?: string;
+  /** For bank-backed items, the bank's own category name (see InventoryItem). */
+  category?: string;
 }
 export interface InvModule {
   id: string;

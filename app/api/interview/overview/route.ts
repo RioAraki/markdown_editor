@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import path from 'path';
-import { loadInterviewPlan, loadLeetCode } from '@shared/interview/load';
+import {
+  loadInterviewPlan,
+  loadLeetCode,
+  loadQBank,
+} from '@shared/interview/load';
 
 /**
  * The whole interview-prep model, straight from the same files the diary
@@ -15,11 +19,12 @@ const DATA_DIR = path.dirname(
 
 export async function GET() {
   try {
-    const [plan, leetcode] = await Promise.all([
+    const [plan, leetcode, qbank] = await Promise.all([
       loadInterviewPlan(DATA_DIR),
       loadLeetCode(DATA_DIR),
+      loadQBank(DATA_DIR),
     ]);
-    return NextResponse.json({ plan, leetcode });
+    return NextResponse.json({ plan, leetcode, qbank });
   } catch (error) {
     console.error('Error in GET /api/interview/overview:', error);
     return NextResponse.json(

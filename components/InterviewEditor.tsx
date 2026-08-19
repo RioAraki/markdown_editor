@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   Check,
@@ -25,6 +25,9 @@ import { TodayPicker } from './interview/TodayPicker';
 import { UnitRecord } from './interview/UnitRecord';
 import { TaskNote } from './interview/TaskNote';
 import { AddProblem } from './interview/AddProblem';
+import { QuestionRecord, QuestionMeta } from './interview/QuestionRecord';
+import { AddQuestion } from './interview/AddQuestion';
+import { parseQuestionUnit } from '@shared/interview/qbank';
 import { usePullToRefresh } from './training/usePullToRefresh';
 
 const PTR_THRESHOLD = 60;
@@ -78,6 +81,38 @@ export function InterviewEditor() {
     tasks: Record<string, string>;
     problems: Record<number, string>;
   }>({ tasks: {}, problems: {} });
+  const [qmeta, setQmeta] = useState<Record<string, QuestionMeta>>({});
+  const [qanswers, setQanswers] = useState<Record<string, string>>({});
+  const loadQBank = useCallback(() => {
+    fetch('/api/interview/qbank')
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d: { bank: { questions: QuestionMeta & { id: string }[] }; log: Record<string, { answers: { date: string; text: string }[] }> }) => {
+        const meta: Record<string, QuestionMeta> = {};
+        for (const q of d.bank.questions as unknown as (QuestionMeta & { id: string })[]) {
+          meta[q.id] = {
+            question: q.question,
+            category: q.category,
+            answer: q.answer,
+            url: q.url,
+          };
+        }
+        setQmeta(meta);
+        const latest: Record<string, string> = {};
+        for (const [id, rec] of Object.entries(d.log ?? {})) {
+          const a = rec.answers?.[rec.answers.length - 1];
+          if (a) latest[id] = a.text;
+        }
+        setQanswers(latest);
+      })
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
+    loadQBank();
+    const h = () => loadQBank();
+    window.addEventListener('interview:qbank-updated', h);
+    return () => window.removeEventListener('interview:qbank-updated', h);
+  }, [loadQBank]);
+
   useEffect(() => {
     fetch('/api/interview/tasklinks')
       .then((r) => (r.ok ? r.json() : Promise.reject()))
@@ -228,6 +263,8 @@ export function InterviewEditor() {
                 day={day}
                 isToday={day.dateStr === today}
                 problemTopic={problemTopic}
+                qmeta={qmeta}
+                qanswers={qanswers}
                 links={links}
                 onToggleTaskStatus={toggleTaskStatus}
                 onToggleUnitStatus={toggleUnitStatus}
@@ -247,6 +284,8 @@ function DayCard({
   day,
   isToday,
   problemTopic,
+  qmeta,
+  qanswers,
   links,
   onToggleTaskStatus,
   onToggleUnitStatus,
@@ -256,6 +295,8 @@ function DayCard({
   day: InterviewDayDoc;
   isToday: boolean;
   problemTopic: Record<number, string>;
+  qmeta: Record<string, QuestionMeta>;
+  qanswers: Record<string, string>;
   links: { tasks: Record<string, string>; problems: Record<number, string> };
 } & Handlers) {
   const { done, total } = dayProgress(day);
@@ -317,6 +358,8 @@ function DayCard({
               dateStr={day.dateStr}
               blockIdx={blockIdx}
               problemTopic={problemTopic}
+              qmeta={qmeta}
+              qanswers={qanswers}
               links={links}
               notesBlockIdx={notesBlockIdx}
               noteValue={
@@ -387,6 +430,8 @@ function BlockRow({
   dateStr,
   blockIdx,
   problemTopic,
+  qmeta,
+  qanswers,
   links,
   notesBlockIdx,
   noteValue,
@@ -399,6 +444,8 @@ function BlockRow({
   dateStr: string;
   blockIdx: number;
   problemTopic: Record<number, string>;
+  qmeta: Record<string, QuestionMeta>;
+  qanswers: Record<string, string>;
   links: { tasks: Record<string, string>; problems: Record<number, string> };
   notesBlockIdx: number;
   noteValue: string;
@@ -451,6 +498,7 @@ function BlockRow({
     const total = block.units.length;
     const allDone = doneCount === total && total > 0;
     const isProblemBlock = block.units.some((u) => /#\d+/.test(u.trailing));
+    const isQuestionBlock = block.units.some((u) => !!parseQuestionUnit(u.trailing));
     return (
       <div className="py-3">
         <div className="flex items-baseline justify-between gap-3 mb-2">
@@ -481,25 +529,44 @@ function BlockRow({
           </span>
         </div>
         <div className="space-y-1.5">
-          {block.units.map((unit, unitIdx) => (
-            <UnitRecord
-              key={unitIdx}
-              index={unitIdx + 1}
-              status={unit.status}
-              trailing={unit.trailing}
-              dateStr={dateStr}
-              problemTopic={problemTopic}
-              problemUrl={links.problems}
-              onChange={(s, t) =>
-                onToggleUnitStatus(dateStr, blockIdx, unitIdx, s, t)
-              }
-            />
-          ))}
+          {block.units.map((unit, unitIdx) => {
+            // `key` stays out of this object — React requires it directly on
+            // the element, and spreading it there is an error.
+            const common = {
+              index: unitIdx + 1,
+              status: unit.status,
+              trailing: unit.trailing,
+              dateStr,
+              onChange: (s: UnitStatus, t: string) =>
+                onToggleUnitStatus(dateStr, blockIdx, unitIdx, s, t),
+            };
+            return parseQuestionUnit(unit.trailing) ? (
+              <QuestionRecord
+                key={unitIdx}
+                {...common}
+                meta={qmeta}
+                savedAnswer={qanswers}
+              />
+            ) : (
+              <UnitRecord
+                key={unitIdx}
+                {...common}
+                problemTopic={problemTopic}
+                problemUrl={links.problems}
+              />
+            );
+          })}
         </div>
         {isProblemBlock && (
           <AddProblem
             units={block.units}
             problemTopic={problemTopic}
+            onAdd={(trailing) => onAppendUnit(dateStr, blockIdx, trailing)}
+          />
+        )}
+        {isQuestionBlock && (
+          <AddQuestion
+            units={block.units}
             onAdd={(trailing) => onAppendUnit(dateStr, blockIdx, trailing)}
           />
         )}

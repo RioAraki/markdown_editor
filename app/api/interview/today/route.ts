@@ -9,7 +9,8 @@ import {
   loadMastery,
   suggestForTrack,
 } from '@/lib/interviewInventory';
-import { loadLeetCode } from '@shared/interview/load';
+import { loadLeetCode, loadQBank } from '@shared/interview/load';
+import { recommendQuestions } from '@shared/interview/qbank';
 import { recommendProblems } from '@shared/interview/leetcode';
 import { TodayPlanResponse } from '@/types/interview';
 
@@ -19,13 +20,23 @@ const DATA_DIR = path.dirname(
 
 export async function GET() {
   try {
-    const [plan, inventory, mastery, touches, leetcode] = await Promise.all([
+    const [plan, inventory, mastery, touches, leetcode, qbank] = await Promise.all([
       loadPlan(),
       loadInventory(),
       loadMastery(),
       computeTouchCounts(),
       loadLeetCode(DATA_DIR),
+      loadQBank(DATA_DIR),
     ]);
+
+    // itemId → the bank's own category name, so a 题库 slot bound to `qb-rag`
+    // draws from "RAG 技术" and nothing else.
+    const categoryOf: Record<string, string> = {};
+    for (const d of inventory.domains) {
+      for (const m of d.modules) {
+        for (const it of m.items) if (it.category) categoryOf[it.id] = it.category;
+      }
+    }
 
     const today = format(new Date(), 'yyyy-MM-dd');
     const suggestion = resolveDayPlan(plan, today);
@@ -84,8 +95,34 @@ export async function GET() {
       }));
     }
 
+    // Same idea one level down for 题库 slots: name the actual questions.
+    const usedQuestions = new Set<string>();
+    const suggestedQuestions: TodayPlanResponse['suggestedQuestions'] = {};
+    for (const task of suggestion?.tasks ?? []) {
+      if (!(task.pool ?? []).includes('ai-qbank')) continue;
+      const itemId = suggestedItems[task.name]?.id;
+      const recs = recommendQuestions({
+        bank: qbank.bank,
+        log: qbank.log,
+        category: (itemId && categoryOf[itemId]) || null,
+        count: Math.max(1, task.units),
+        today,
+        exclude: usedQuestions,
+      });
+      for (const r of recs) usedQuestions.add(r.question.id);
+      suggestedQuestions[task.name] = recs.map((r) => ({
+        id: r.question.id,
+        question: r.question.question,
+        category: r.question.category,
+        url: r.question.url,
+        kind: r.kind,
+        reason: r.reason,
+      }));
+    }
+
     const response: TodayPlanResponse = {
       today,
+      suggestedQuestions,
       suggestion,
       templates: plan.templates ?? [],
       suggestedProblems,

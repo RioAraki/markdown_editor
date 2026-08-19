@@ -15,6 +15,7 @@ import {
   PlanDayLite,
   PlanTaskLite,
   SuggestedProblem,
+  SuggestedQuestion,
   TodayPlanResponse,
 } from '@/types/interview';
 
@@ -91,6 +92,12 @@ export function TodayPicker() {
               ps.map((p) => p.id),
             ]),
           ),
+          questions: Object.fromEntries(
+            Object.entries(data.suggestedQuestions ?? {}).map(([task, qs]) => [
+              task,
+              qs.map((q) => q.id),
+            ]),
+          ),
         }),
       });
       if (!res.ok) throw new Error();
@@ -154,6 +161,7 @@ export function TodayPicker() {
                     setSwapping(null);
                   }}
                   problems={data.suggestedProblems?.[task.name] ?? []}
+                  questions={data.suggestedQuestions?.[task.name] ?? []}
                   candidates={(data.choices ?? []).filter(
                     (c) =>
                       (domainByTrack.get(task.track) ?? []).includes(
@@ -253,6 +261,7 @@ function SlotRow({
   onPick,
   candidates,
   problems,
+  questions,
 }: {
   task: PlanTaskLite;
   emoji: string;
@@ -266,6 +275,8 @@ function SlotRow({
   candidates: ItemChoiceLite[];
   /** For 刷题 slots: the concrete problems picked for each checkbox. */
   problems: SuggestedProblem[];
+  /** For 题库 slots: the concrete questions picked for each checkbox. */
+  questions: SuggestedQuestion[];
 }) {
   const [q, setQ] = useState('');
   const title =
@@ -299,6 +310,10 @@ function SlotRow({
               <p className="text-xs text-stone-400 mt-0.5 italic">
                 → 考察什么做完再揭晓
               </p>
+            ) : questions.length > 0 ? (
+              <p className="text-xs text-stone-700 mt-0.5">
+                → {title}
+              </p>
             ) : title ? (
               <p className="text-xs text-stone-700 mt-0.5">
                 → {title}
@@ -314,7 +329,7 @@ function SlotRow({
               </p>
             )}
           </div>
-          {problems.length === 0 && (
+          {problems.length === 0 && questions.length === 0 && (
             <button
               type="button"
               onClick={onToggleSwap}
@@ -326,6 +341,33 @@ function SlotRow({
             </button>
           )}
         </div>
+
+        {questions.length > 0 && (
+          <ul className="mt-2 ml-6 space-y-1">
+            {questions.map((q) => (
+              <li key={q.id} className="text-[11px] leading-relaxed">
+                <span
+                  className={`inline-block px-1 rounded mr-1 ${
+                    q.kind === 'redo'
+                      ? 'bg-rose-100 text-rose-800 font-medium'
+                      : 'bg-sky-100 text-sky-800'
+                  }`}
+                >
+                  {q.kind === 'redo' ? '待重做' : '新题'}
+                </span>
+                <a
+                  href={q.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-stone-700 hover:text-indigo-700 underline decoration-stone-300 decoration-dotted underline-offset-2"
+                >
+                  {q.question}
+                </a>
+                <span className="block text-stone-400 ml-6">{q.reason}</span>
+              </li>
+            ))}
+          </ul>
+        )}
 
         {problems.length > 0 && (
           <ul className="mt-2 ml-6 space-y-1">

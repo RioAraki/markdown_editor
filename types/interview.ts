@@ -158,10 +158,22 @@ export interface SuggestedProblem {
   reason: string;
 }
 
+/** One Agent-bank question offered for a 题库 slot. */
+export interface SuggestedQuestion {
+  id: string;
+  question: string;
+  category: string;
+  url: string;
+  kind: 'redo' | 'new';
+  reason: string;
+}
+
 export interface TodayPlanResponse {
   today: string;
   /** Task name → the problems recommended for its checkboxes, in order. */
   suggestedProblems: Record<string, SuggestedProblem[]>;
+  /** Task name → the concrete Agent-bank questions picked for it. */
+  suggestedQuestions: Record<string, SuggestedQuestion[]>;
   /** Prescription resolved from phase × weekday (or a date override). */
   suggestion?: PlanDayLite;
   /** All templates, so the user can override the suggestion. */
@@ -182,6 +194,8 @@ export interface CreateDayRequest {
   items?: Record<string, string>;
   /** Task name → ordered LeetCode problem ids, one per checkbox. */
   problems?: Record<string, number[]>;
+  /** Task name → ordered Agent-bank question ids, one per checkbox. */
+  questions?: Record<string, string[]>;
 }
 
 export interface MasteryEntryLite {

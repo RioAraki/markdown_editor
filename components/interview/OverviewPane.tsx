@@ -17,6 +17,8 @@ import {
   weekStatuses,
 } from '@shared/interview/core';
 import { reviewDebt, topicMetrics } from '@shared/interview/leetcode';
+import { categoryMetrics, qbankDebt } from '@shared/interview/qbank';
+import type { QBankLog, QuestionBank } from '@shared/interview/qbank';
 import type { InterviewPlan, TrackKey } from '@shared/interview/types';
 import type { LeetCodeLog, ProblemBank } from '@shared/interview/leetcode';
 import { useInterview } from '@/contexts/InterviewContext';
@@ -25,6 +27,7 @@ import { getTodayDate } from '@/lib/dateUtils';
 
 interface Bundle {
   plan: InterviewPlan;
+  qbank: { bank: QuestionBank; log: QBankLog };
   leetcode: { bank: ProblemBank; log: LeetCodeLog };
 }
 
@@ -63,8 +66,11 @@ export function OverviewPane() {
     // so the in-memory overlay can't see them — re-read on the broadcast.
     const onUpdated = () => void load();
     window.addEventListener('interview:leetcode-updated', onUpdated);
-    return () =>
+    window.addEventListener('interview:qbank-updated', onUpdated);
+    return () => {
       window.removeEventListener('interview:leetcode-updated', onUpdated);
+      window.removeEventListener('interview:qbank-updated', onUpdated);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -80,11 +86,29 @@ export function OverviewPane() {
 
     const statuses = weekStatuses(plan, today);
     const currentWeek = weekOf(plan, today);
-    const metrics = Object.fromEntries(
-      Object.entries(
+    // Agent-bank items name the category they draw from — that mapping is what
+    // gives `qb-rag` its 47-question denominator.
+    const itemsByCategory: Record<string, string> = {};
+    for (const d of plan.inventory.domains) {
+      for (const m of d.modules) {
+        for (const it of m.items) {
+          if (it.category) itemsByCategory[it.category] = it.id;
+        }
+      }
+    }
+    const metrics = Object.fromEntries([
+      ...Object.entries(
         topicMetrics(bundle.leetcode.bank, bundle.leetcode.log, today),
       ).map(([id, m]) => [id, { ...m, unit: '题' }]),
-    );
+      ...Object.entries(
+        categoryMetrics(
+          bundle.qbank?.bank ?? { questions: [] },
+          bundle.qbank?.log ?? {},
+          today,
+          itemsByCategory,
+        ),
+      ).map(([id, m]) => [id, { ...m, unit: '题' }]),
+    ]);
     const coverage = inventoryCoverage(plan, metrics);
     const elapsed = plan.meta.startDate
       ? datesBetween(plan.meta.startDate, today)
@@ -112,6 +136,11 @@ export function OverviewPane() {
           ] as TrackKey[])
         : [],
       debt: reviewDebt(bundle.leetcode.bank, bundle.leetcode.log, today),
+      qdebt: qbankDebt(
+        bundle.qbank?.bank ?? { questions: [] },
+        bundle.qbank?.log ?? {},
+        today,
+      ),
     };
   }, [bundle, days, today]);
 
@@ -167,6 +196,21 @@ export function OverviewPane() {
               {model.debt.due}
             </span>{' '}
             · 未做 {model.debt.newCount}
+          </span>
+          <span className="text-[11px] text-stone-500 border-l border-stone-200 pl-2">
+            题库 已答{' '}
+            <span className="font-mono font-semibold text-stone-600">
+              {model.qdebt.answered}
+            </span>
+            {model.qdebt.redoDue > 0 && (
+              <>
+                {' '}
+                · 待重做{' '}
+                <span className="font-mono font-semibold text-rose-600">
+                  {model.qdebt.redoDue}
+                </span>
+              </>
+            )}
           </span>
           <button
             onClick={load}
