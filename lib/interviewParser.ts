@@ -259,7 +259,13 @@ export function setTaskStatus(
     return {
       ...block,
       status,
-      trailing: status === 'partial' ? (trailing ?? block.trailing) : '',
+      // Same rule as units: an explicit trailing is never discarded.
+      trailing:
+        trailing !== undefined
+          ? trailing
+          : status === 'partial'
+            ? block.trailing
+            : '',
     };
   });
   return { ...doc, blocks };
@@ -279,12 +285,15 @@ export function setUnitStatus(
       return {
         ...u,
         status,
+        // An explicit trailing always wins — 刷题 units carry the problem name
+        // there, and clearing it on "done" would lose which problem this was.
+        // Only fall back to wiping it when the caller says nothing.
         trailing:
-          status === 'partial'
-            ? trailing !== undefined
-              ? trailing
-              : u.trailing
-            : ' ',
+          trailing !== undefined
+            ? trailing
+            : status === 'partial'
+              ? u.trailing
+              : ' ',
       };
     });
     return { ...block, units };
