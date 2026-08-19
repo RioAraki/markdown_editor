@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { ExternalLink, Loader2 } from 'lucide-react';
 import {
+  OUTCOME_HINT,
   OUTCOME_LABEL,
   OUTCOME_ORDER,
   Outcome,
   nextInterval,
-  parseProblemUnit,
+  parseProblemRecord,
 } from '@shared/interview/leetcode';
 import { UnitStatus } from '@/types/interview';
 
@@ -42,11 +43,13 @@ const GENERIC: { status: UnitStatus; label: string; tone: string; active: string
     },
   ];
 
+// A ramp from "didn't get it" to "nailed it", so the row reads left-to-right.
 const OUTCOME_TONE: Record<Outcome, string> = {
   failed: 'bg-red-100 text-red-700 border-red-300 hover:bg-red-200',
   'used-solution':
     'bg-orange-100 text-orange-700 border-orange-300 hover:bg-orange-200',
   struggled: 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200',
+  suboptimal: 'bg-lime-100 text-lime-800 border-lime-300 hover:bg-lime-200',
   clean:
     'bg-emerald-100 text-emerald-700 border-emerald-300 hover:bg-emerald-200',
   unknown: '',
@@ -55,6 +58,7 @@ const OUTCOME_ACTIVE: Record<Outcome, string> = {
   failed: 'bg-red-600 text-white border-red-600',
   'used-solution': 'bg-orange-500 text-white border-orange-500',
   struggled: 'bg-amber-500 text-white border-amber-500',
+  suboptimal: 'bg-lime-600 text-white border-lime-600',
   clean: 'bg-emerald-600 text-white border-emerald-600',
   unknown: '',
 };
@@ -67,19 +71,10 @@ function decompose(trailing: string): {
   note: string;
 } {
   const raw = trailing.trim();
-  const parsed = parseProblemUnit(raw);
-  if (!parsed) return { head: '', note: raw };
-
-  const parts = raw.split('·').map((p) => p.trim());
-  const head = parts[0] ?? '';
-  let outcome: Outcome | undefined;
-  const rest: string[] = [];
-  for (const p of parts.slice(1)) {
-    const hit = OUTCOME_ORDER.find((o) => OUTCOME_LABEL[o] === p);
-    if (hit && !outcome) outcome = hit;
-    else rest.push(p);
-  }
-  return { problemId: parsed.id, head, outcome, note: rest.join(' · ') };
+  const rec = parseProblemRecord(raw);
+  // A non-problem slot has no id and no outcome — the whole line is the note.
+  if (!rec) return { head: '', note: raw };
+  return { problemId: rec.id, head: rec.head, outcome: rec.outcome, note: rec.note };
 }
 
 function compose(
@@ -236,7 +231,10 @@ export function UnitRecord({
                       type="button"
                       onClick={() => pickOutcome(o)}
                       disabled={saving}
-                      title={`记录后约 ${nextInterval(undefined, o)} 天再安排复习`}
+                      title={`${OUTCOME_HINT[o]} · 记录后约 ${nextInterval(
+                        undefined,
+                        o,
+                      )} 天再安排复习`}
                       className={`text-[11px] px-2 py-1 rounded border transition-colors disabled:opacity-50 ${
                         active ? OUTCOME_ACTIVE[o] : OUTCOME_TONE[o]
                       }`}
@@ -277,6 +275,8 @@ export function UnitRecord({
                     {parts.outcome === 'clean'
                       ? '连续两次完美且间隔超过 90 天才退出轮转'
                       : `约 ${nextInterval(undefined, parts.outcome)} 天后会再出现在推荐里`}
+                    {parts.outcome === 'suboptimal' &&
+                      ' · 掌握有偏差，进度条按未掌握算'}
                   </p>
                 </div>
               ) : (

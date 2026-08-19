@@ -12,8 +12,14 @@ import {
 } from '@/lib/interviewPlan';
 import { flattenInventory, loadInventory, loadMastery } from '@/lib/interviewInventory';
 import path from 'path';
+import fs from 'fs/promises';
 import { loadLeetCode } from '@shared/interview/load';
-import { problemUnitText } from '@shared/interview/leetcode';
+import {
+  Attempt,
+  LeetCodeLog,
+  attemptsFromDayText,
+  problemUnitText,
+} from '@shared/interview/leetcode';
 import {
   CreateDayRequest,
   InterviewDayContentResponse,
@@ -58,6 +64,51 @@ export async function GET(_req: Request, context: RouteContext) {
   }
 }
 
+const same = (a?: Attempt, b?: Attempt) =>
+  a?.outcome === b?.outcome && (a?.note ?? '') === (b?.note ?? '');
+
+/**
+ * Make leetcode-log.json agree with what the day file says about `date`.
+ *
+ * The log is written eagerly when you tap an outcome, the markdown is written
+ * by a debounced autosave — two writes that can disagree if either one fails.
+ * The markdown is the half you can see, so it wins, and every save re-derives
+ * that day's attempts from it. This also carries the note across, which the
+ * eager write misses when you type it after tapping the outcome.
+ */
+async function reconcileLeetCodeLog(date: string, content: string) {
+  const claimed = new Map(
+    attemptsFromDayText(content, date).map((c) => [String(c.id), c.attempt]),
+  );
+  const { log } = await loadLeetCode(DATA_DIR);
+
+  const store: LeetCodeLog = {};
+  let changed = false;
+  for (const [key, entry] of Object.entries(log)) {
+    const kept = entry.attempts.filter((a) => a.date !== date);
+    const had = entry.attempts.find((a) => a.date === date);
+    const want = claimed.get(key);
+    if (want) {
+      kept.push(want);
+      claimed.delete(key);
+    }
+    if (!same(had, want)) changed = true;
+    if (kept.length > 0) {
+      store[key] = {
+        attempts: kept.sort((a, b) => a.date.localeCompare(b.date)),
+      };
+    }
+  }
+  for (const [key, attempt] of claimed) {
+    store[key] = { attempts: [attempt] };
+    changed = true;
+  }
+
+  if (!changed) return;
+  const logPath = path.join(DATA_DIR, 'leetcode-log.json');
+  await fs.writeFile(logPath, JSON.stringify(store, null, 2) + '\n', 'utf-8');
+}
+
 export async function PUT(req: Request, context: RouteContext) {
   try {
     const { date } = await context.params;
@@ -72,6 +123,9 @@ export async function PUT(req: Request, context: RouteContext) {
       );
     }
     await writeInterviewDay(date, body.content);
+    await reconcileLeetCodeLog(date, body.content).catch((e) =>
+      console.error('Failed to reconcile leetcode log:', e),
+    );
     const response: InterviewDayContentResponse = {
       dateStr: date,
       filename: `${date}.md`,
