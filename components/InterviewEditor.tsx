@@ -1,9 +1,8 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
-  Award,
   Check,
   Loader2,
   RefreshCw,
@@ -18,21 +17,12 @@ import {
   InterviewBlock,
   InterviewDayDoc,
   OVERALL_NOTE_NAME,
-  TaskUnit,
   UnitStatus,
   taskName,
 } from '@/types/interview';
-import { parsePlannedTarget } from '@/lib/interviewParser';
-import {
-  OUTCOME_LABEL,
-  OUTCOME_ORDER,
-  Outcome,
-  parseProblemUnit,
-} from '@shared/interview/leetcode';
 import { TodayPicker } from './interview/TodayPicker';
-import { UnitChip } from './interview/UnitChip';
+import { UnitRecord } from './interview/UnitRecord';
 import { TaskNote } from './interview/TaskNote';
-import { ProblemOutcome } from './interview/ProblemOutcome';
 import { usePullToRefresh } from './training/usePullToRefresh';
 
 const PTR_THRESHOLD = 60;
@@ -57,10 +47,6 @@ interface Handlers {
     name: string,
     note: string,
   ) => void;
-  /** Item id bound to this task, if the day was created with inventory binding. */
-  itemsByTask: Record<string, string>;
-  mastery: Record<string, { status: 'mastered'; at: string; note?: string }>;
-  onToggleMastery: (itemId: string, mastered: boolean) => void;
 }
 
 export function InterviewEditor() {
@@ -71,8 +57,6 @@ export function InterviewEditor() {
     lastSaved,
     hasUnsavedChanges,
     error,
-    mastery,
-    toggleMastery,
     toggleTaskStatus,
     toggleUnitStatus,
     updateNoteEntry,
@@ -82,6 +66,27 @@ export function InterviewEditor() {
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const today = getTodayDate();
+
+  // problemId → 中文专题名. Only used to reveal what an already-attempted
+  // problem was testing; never shown before an outcome is recorded.
+  const [problemTopic, setProblemTopic] = useState<Record<number, string>>({});
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/interview/leetcode')
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d: { bank: { problems: { id: number; item: string | null }[] }; topics: Record<string, string> }) => {
+        if (cancelled) return;
+        const m: Record<number, string> = {};
+        for (const p of d.bank.problems) {
+          if (p.item && d.topics[p.item]) m[p.id] = d.topics[p.item];
+        }
+        setProblemTopic(m);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const { pullDistance, isRefreshing } = usePullToRefresh(
     scrollContainerRef,
     refresh,
@@ -208,9 +213,7 @@ export function InterviewEditor() {
                 key={day.dateStr}
                 day={day}
                 isToday={day.dateStr === today}
-                itemsByTask={day.itemsByTask}
-                mastery={mastery}
-                onToggleMastery={toggleMastery}
+                problemTopic={problemTopic}
                 onToggleTaskStatus={toggleTaskStatus}
                 onToggleUnitStatus={toggleUnitStatus}
                 onUpdateNoteEntry={updateNoteEntry}
@@ -227,13 +230,15 @@ export function InterviewEditor() {
 function DayCard({
   day,
   isToday,
-  itemsByTask,
-  mastery,
-  onToggleMastery,
+  problemTopic,
   onToggleTaskStatus,
   onToggleUnitStatus,
   onUpdateNoteEntry,
-}: { day: InterviewDayDoc; isToday: boolean } & Handlers) {
+}: {
+  day: InterviewDayDoc;
+  isToday: boolean;
+  problemTopic: Record<number, string>;
+} & Handlers) {
   const { done, total } = dayProgress(day);
 
   const notesBlockIdx = day.blocks.findIndex((b) => b.kind === 'notes');
@@ -292,15 +297,13 @@ function DayCard({
               block={block}
               dateStr={day.dateStr}
               blockIdx={blockIdx}
+              problemTopic={problemTopic}
               notesBlockIdx={notesBlockIdx}
               noteValue={
                 block.kind === 'task' || block.kind === 'task-units'
                   ? (noteByName.get(taskName(block.label)) ?? '')
                   : ''
               }
-              itemsByTask={itemsByTask}
-              mastery={mastery}
-              onToggleMastery={onToggleMastery}
               onToggleTaskStatus={onToggleTaskStatus}
               onToggleUnitStatus={onToggleUnitStatus}
               onUpdateNoteEntry={onUpdateNoteEntry}
@@ -339,129 +342,32 @@ function DayCard({
   );
 }
 
+
 /**
- * One checkbox of a 刷题 slot, bound to a concrete problem.
+ * Strip the algorithm topic out of a 刷题 label for display.
  *
- * Recording an outcome does two things at once: it writes the attempt to
- * leetcode-log.json (which drives the spaced repetition schedule) and it
- * rewrites this line's text so the markdown stays self-describing.
+ * Naming the topic before the problem is solved is a hint, and older day files
+ * were generated with it baked in — so hide it at render time rather than
+ * trusting the file. Only segments that exactly match a known topic name go.
  */
-function ProblemUnitRow({
-  index,
-  unit,
-  parsed,
-  dateStr,
-  onChange,
-}: {
-  index: number;
-  unit: TaskUnit;
-  parsed: { id: number; outcome?: Outcome } | null;
-  dateStr: string;
-  onChange: (status: UnitStatus, trailing?: string) => void;
-}) {
-  if (!parsed) {
-    return (
-      <div className="flex items-start gap-3">
-        <UnitChip
-          index={index}
-          status={unit.status}
-          trailing={unit.trailing}
-          onChange={onChange}
-        />
-        <span className="text-sm text-stone-500 mt-2.5">{unit.trailing.trim() || '（未指定题目）'}</span>
-      </div>
-    );
-  }
-
-  // "#121 两数之和 · 比较完美" → head is everything before the outcome label.
-  const raw = unit.trailing.trim();
-  const head = OUTCOME_ORDER.reduce(
-    (acc, o) => acc.replace(new RegExp(`\\s*·\\s*${OUTCOME_LABEL[o]}$`), ''),
-    raw,
-  );
-  const title = head.replace(/^#\d+\s*/, '');
-
-  const apply = (outcome: Outcome | null) => {
-    if (!outcome) {
-      onChange('pending', ` ${head}`);
-      return;
-    }
-    onChange(outcome === 'clean' ? 'done' : 'partial', ` ${head} · ${OUTCOME_LABEL[outcome]}`);
-  };
-
-  return (
-    <div className="rounded-lg border border-stone-200 bg-stone-50/60 px-3 py-2">
-      <div className="flex items-start gap-2">
-        <span className="text-[11px] font-mono text-stone-400 mt-0.5 w-4 shrink-0">
-          {index}
-        </span>
-        <div className="flex-1 min-w-0">
-          <p
-            className={`text-sm leading-snug ${
-              unit.status === 'done'
-                ? 'text-stone-400 line-through'
-                : 'text-stone-800'
-            }`}
-          >
-            <span className="font-mono text-stone-500">#{parsed.id}</span>{' '}
-            {title}
-          </p>
-          <ProblemOutcome
-            problemId={parsed.id}
-            title={title}
-            url={`https://leetcode.cn/problems/?q=${parsed.id}`}
-            current={parsed.outcome}
-            date={dateStr}
-            onRecorded={apply}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** "标记已掌握" toggle — the only way an inventory item reaches 已掌握. */
-function MasteryToggle({
-  itemId,
-  mastery,
-  onToggle,
-}: {
-  itemId?: string;
-  mastery: Record<string, { status: 'mastered'; at: string; note?: string }>;
-  onToggle: (itemId: string, mastered: boolean) => void;
-}) {
-  if (!itemId) return null;
-  const done = !!mastery[itemId];
-  return (
-    <button
-      type="button"
-      onClick={() => onToggle(itemId, !done)}
-      title={
-        done
-          ? `已掌握 · ${mastery[itemId].at}（点击取消）`
-          : '确认已掌握——标准是能不看稿讲出来'
-      }
-      className={`mt-2 inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border transition-colors ${
-        done
-          ? 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100'
-          : 'bg-white border-stone-300 text-stone-500 hover:border-emerald-400 hover:text-emerald-700'
-      }`}
-    >
-      <Award className="w-3 h-3" />
-      {done ? `已掌握 · ${mastery[itemId].at.slice(5)}` : '标记已掌握'}
-    </button>
-  );
+function displayLabel(
+  label: string,
+  isProblemBlock: boolean,
+  problemTopic: Record<number, string>,
+): string {
+  if (!isProblemBlock) return label;
+  const topics = new Set(Object.values(problemTopic));
+  const parts = label.split('·').map((p) => p.trim());
+  return parts.filter((p, i) => i === 0 || !topics.has(p)).join(' · ');
 }
 
 function BlockRow({
   block,
   dateStr,
   blockIdx,
+  problemTopic,
   notesBlockIdx,
   noteValue,
-  itemsByTask,
-  mastery,
-  onToggleMastery,
   onToggleTaskStatus,
   onToggleUnitStatus,
   onUpdateNoteEntry,
@@ -469,38 +375,29 @@ function BlockRow({
   block: InterviewBlock;
   dateStr: string;
   blockIdx: number;
+  problemTopic: Record<number, string>;
   notesBlockIdx: number;
   noteValue: string;
 } & Handlers) {
   if (block.kind === 'task') {
     const name = taskName(block.label);
     return (
-      <div className="py-3 -mx-2 px-2">
-        <label className="flex items-start gap-3 cursor-pointer group">
-          <UnitChip
-            index={1}
-            status={block.status}
-            trailing={block.trailing}
-            plannedTarget={parsePlannedTarget(block.label)}
-            onChange={(s, t) => onToggleTaskStatus(dateStr, blockIdx, s, t)}
-          />
-          <span
-            className={`text-[15px] leading-relaxed select-text mt-1 ${
-              block.status === 'done'
-                ? 'text-stone-400 line-through'
-                : 'text-stone-800'
-            }`}
-          >
-            {block.label}
-          </span>
-        </label>
-        <div className="flex items-start gap-2 flex-wrap">
-          <MasteryToggle
-            itemId={itemsByTask[name]}
-            mastery={mastery}
-            onToggle={onToggleMastery}
-          />
-        </div>
+      <div className="py-3">
+        <p
+          className={`text-[15px] leading-snug select-text mb-2 ${
+            block.status === 'done' ? 'text-stone-400' : 'text-stone-800'
+          }`}
+        >
+          {block.label}
+        </p>
+        <UnitRecord
+          index={1}
+          status={block.status}
+          trailing={block.trailing}
+          dateStr={dateStr}
+          problemTopic={problemTopic}
+          onChange={(s, t) => onToggleTaskStatus(dateStr, blockIdx, s, t)}
+        />
         {notesBlockIdx >= 0 && (
           <TaskNote
             value={noteValue}
@@ -518,20 +415,16 @@ function BlockRow({
     const doneCount = block.units.filter((u) => u.status !== 'pending').length;
     const total = block.units.length;
     const allDone = doneCount === total && total > 0;
-    // A 刷题 slot names a concrete problem on each checkbox; those rows get the
-    // four-way outcome recorder instead of the generic done/partial chip.
-    const parsed = block.units.map((u) => parseProblemUnit(u.trailing));
-    const hasProblems = parsed.some((p) => p !== null);
-
+    const isProblemBlock = block.units.some((u) => /#\d+/.test(u.trailing));
     return (
       <div className="py-3">
         <div className="flex items-baseline justify-between gap-3 mb-2">
           <p
             className={`text-[15px] leading-snug select-text ${
-              allDone ? 'text-stone-400 line-through' : 'text-stone-800'
+              allDone ? 'text-stone-400' : 'text-stone-800'
             }`}
           >
-            {block.label}
+            {displayLabel(block.label, isProblemBlock, problemTopic)}
           </p>
           <span
             className={`text-[11px] font-mono shrink-0 ${
@@ -541,42 +434,21 @@ function BlockRow({
             {doneCount}/{total}
           </span>
         </div>
-        {hasProblems ? (
-          <div className="space-y-2">
-            {block.units.map((unit, unitIdx) => (
-              <ProblemUnitRow
-                key={unitIdx}
-                index={unitIdx + 1}
-                unit={unit}
-                parsed={parsed[unitIdx]}
-                dateStr={dateStr}
-                onChange={(s, t) =>
-                  onToggleUnitStatus(dateStr, blockIdx, unitIdx, s, t)
-                }
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {block.units.map((unit, unitIdx) => (
-              <UnitChip
-                key={unitIdx}
-                index={unitIdx + 1}
-                status={unit.status}
-                trailing={unit.trailing}
-                plannedTarget={parsePlannedTarget(block.label)}
-                onChange={(s, t) =>
-                  onToggleUnitStatus(dateStr, blockIdx, unitIdx, s, t)
-                }
-              />
-            ))}
-          </div>
-        )}
-        <MasteryToggle
-          itemId={itemsByTask[name]}
-          mastery={mastery}
-          onToggle={onToggleMastery}
-        />
+        <div className="space-y-1.5">
+          {block.units.map((unit, unitIdx) => (
+            <UnitRecord
+              key={unitIdx}
+              index={unitIdx + 1}
+              status={unit.status}
+              trailing={unit.trailing}
+              dateStr={dateStr}
+              problemTopic={problemTopic}
+              onChange={(s, t) =>
+                onToggleUnitStatus(dateStr, blockIdx, unitIdx, s, t)
+              }
+            />
+          ))}
+        </div>
         {notesBlockIdx >= 0 && (
           <TaskNote
             value={noteValue}

@@ -104,7 +104,13 @@ export function buildDayMarkdown(
 
   lines.push('');
   for (const task of day.tasks ?? []) {
-    lines.push(`- ${taskLabel(task, binding[task.name]?.title)}`);
+    // 刷题 slots deliberately omit the topic from the visible label: naming the
+    // algorithm before you have solved the problem is a hint. It gets revealed
+    // once an outcome is recorded.
+    const showItem = task.track !== 'leetcode';
+    lines.push(
+      `- ${taskLabel(task, showItem ? binding[task.name]?.title : undefined)}`,
+    );
     const texts = unitTexts[task.name] ?? [];
     const n = Math.max(1, task.units);
     for (let i = 0; i < n; i++) {

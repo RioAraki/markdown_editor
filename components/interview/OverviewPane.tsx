@@ -16,7 +16,7 @@ import {
   weekOf,
   weekStatuses,
 } from '@shared/interview/core';
-import { reviewDebt } from '@shared/interview/leetcode';
+import { reviewDebt, topicMetrics } from '@shared/interview/leetcode';
 import type { InterviewPlan, TrackKey } from '@shared/interview/types';
 import type { LeetCodeLog, ProblemBank } from '@shared/interview/leetcode';
 import { useInterview } from '@/contexts/InterviewContext';
@@ -37,7 +37,7 @@ interface Bundle {
  * without waiting for the autosave round-trip.
  */
 export function OverviewPane() {
-  const { days, mastery } = useInterview();
+  const { days } = useInterview();
   const [bundle, setBundle] = useState<Bundle | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
@@ -59,6 +59,12 @@ export function OverviewPane() {
 
   useEffect(() => {
     void load();
+    // Attempt outcomes live in leetcode-log.json rather than the day markdown,
+    // so the in-memory overlay can't see them — re-read on the broadcast.
+    const onUpdated = () => void load();
+    window.addEventListener('interview:leetcode-updated', onUpdated);
+    return () =>
+      window.removeEventListener('interview:leetcode-updated', onUpdated);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -70,11 +76,16 @@ export function OverviewPane() {
     for (const doc of days) {
       logs[doc.dateStr] = parseDayLog(serializeInterviewDayDoc(doc));
     }
-    const plan: InterviewPlan = { ...bundle.plan, logs, mastery };
+    const plan: InterviewPlan = { ...bundle.plan, logs };
 
     const statuses = weekStatuses(plan, today);
     const currentWeek = weekOf(plan, today);
-    const coverage = inventoryCoverage(plan);
+    const metrics = Object.fromEntries(
+      Object.entries(
+        topicMetrics(bundle.leetcode.bank, bundle.leetcode.log, today),
+      ).map(([id, m]) => [id, { ...m, unit: '题' }]),
+    );
+    const coverage = inventoryCoverage(plan, metrics);
     const elapsed = plan.meta.startDate
       ? datesBetween(plan.meta.startDate, today)
       : [];
@@ -102,7 +113,7 @@ export function OverviewPane() {
         : [],
       debt: reviewDebt(bundle.leetcode.bank, bundle.leetcode.log, today),
     };
-  }, [bundle, days, mastery, today]);
+  }, [bundle, days, today]);
 
   if (error) {
     return (

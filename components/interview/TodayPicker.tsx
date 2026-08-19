@@ -295,7 +295,11 @@ function SlotRow({
                 {task.minutes ? ` · ${task.minutes}min` : ''}
               </span>
             </div>
-            {title ? (
+            {problems.length > 0 ? (
+              <p className="text-xs text-stone-400 mt-0.5 italic">
+                → 考察什么做完再揭晓
+              </p>
+            ) : title ? (
               <p className="text-xs text-stone-700 mt-0.5">
                 → {title}
                 {touches > 0 && (
@@ -310,15 +314,17 @@ function SlotRow({
               </p>
             )}
           </div>
-          <button
-            type="button"
-            onClick={onToggleSwap}
-            className="shrink-0 inline-flex items-center gap-1 text-[11px] text-stone-500 hover:text-indigo-700 px-1.5 py-1 rounded hover:bg-white transition-colors"
-            title="换一个条目"
-          >
-            <RefreshCw className="w-3 h-3" />
-            换
-          </button>
+          {problems.length === 0 && (
+            <button
+              type="button"
+              onClick={onToggleSwap}
+              className="shrink-0 inline-flex items-center gap-1 text-[11px] text-stone-500 hover:text-indigo-700 px-1.5 py-1 rounded hover:bg-white transition-colors"
+              title="换一个条目"
+            >
+              <RefreshCw className="w-3 h-3" />
+              换
+            </button>
+          )}
         </div>
 
         {problems.length > 0 && (

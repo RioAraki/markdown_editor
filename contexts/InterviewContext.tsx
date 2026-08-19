@@ -25,9 +25,6 @@ interface InterviewContextType {
   lastSaved: Date | null;
   hasUnsavedChanges: boolean;
   error: string | null;
-  /** Inventory item ids confirmed as mastered. */
-  mastery: Record<string, { status: 'mastered'; at: string; note?: string }>;
-  toggleMastery: (itemId: string, mastered: boolean) => Promise<void>;
   toggleTaskStatus: (
     dateStr: string,
     blockIdx: number,
@@ -103,55 +100,9 @@ export function InterviewProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const [mastery, setMastery] = useState<
-    Record<string, { status: 'mastered'; at: string; note?: string }>
-  >({});
-
-  const fetchMastery = useCallback(async () => {
-    try {
-      const res = await fetch('/api/interview/mastery');
-      if (!res.ok) return;
-      setMastery(await res.json());
-    } catch {
-      // Mastery is supplementary — a failure here shouldn't blank the editor.
-    }
-  }, []);
-
-  const toggleMastery = useCallback(
-    async (itemId: string, mastered: boolean) => {
-      // Optimistic: the toggle should feel instant.
-      setMastery((prev) => {
-        const next = { ...prev };
-        if (mastered) {
-          next[itemId] = {
-            status: 'mastered',
-            at: new Date().toISOString().slice(0, 10),
-          };
-        } else {
-          delete next[itemId];
-        }
-        return next;
-      });
-      try {
-        const res = await fetch('/api/interview/mastery', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ itemId, mastered }),
-        });
-        if (!res.ok) throw new Error();
-        setMastery(await res.json());
-      } catch {
-        setError('掌握状态保存失败');
-        void fetchMastery();
-      }
-    },
-    [fetchMastery],
-  );
-
   useEffect(() => {
     fetchDays();
-    fetchMastery();
-  }, [fetchDays, fetchMastery]);
+  }, [fetchDays]);
 
   const updateDay = useCallback(
     (dateStr: string, mutator: (doc: InterviewDayDoc) => InterviewDayDoc) => {
@@ -255,8 +206,6 @@ export function InterviewProvider({ children }: { children: React.ReactNode }) {
     lastSaved,
     hasUnsavedChanges,
     error,
-    mastery,
-    toggleMastery,
     toggleTaskStatus,
     toggleUnitStatus,
     updateNoteEntry,

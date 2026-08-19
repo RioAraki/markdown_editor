@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
 import { format } from 'date-fns';
+import { loadInventory } from '@/lib/interviewInventory';
 import { loadLeetCode } from '@shared/interview/load';
 import {
   Attempt,
@@ -17,14 +18,28 @@ const DATA_DIR = path.dirname(
 );
 const LOG_PATH = path.join(DATA_DIR, 'leetcode-log.json');
 
-/** Bank + attempt log + derived per-problem state. */
+/** Bank + attempt log + derived per-problem state + topic titles. */
 export async function GET() {
   try {
-    const { bank, log } = await loadLeetCode(DATA_DIR);
+    const [{ bank, log }, inventory] = await Promise.all([
+      loadLeetCode(DATA_DIR),
+      loadInventory(),
+    ]);
     const today = format(new Date(), 'yyyy-MM-dd');
+
+    // itemId → 中文专题名, so the UI can reveal 「考察：滑动窗口」 *after* an
+    // attempt is recorded. Naming it earlier would be a hint.
+    const topics: Record<string, string> = {};
+    for (const d of inventory.domains) {
+      for (const m of d.modules) {
+        for (const it of m.items) topics[it.id] = it.title;
+      }
+    }
+
     return NextResponse.json({
       bank,
       log,
+      topics,
       states: allProblemStates(bank, log, today),
       debt: reviewDebt(bank, log, today),
       today,
