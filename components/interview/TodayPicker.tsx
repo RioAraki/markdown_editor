@@ -14,6 +14,7 @@ import {
   ItemChoiceLite,
   PlanDayLite,
   PlanTaskLite,
+  SuggestedProblem,
   TodayPlanResponse,
 } from '@/types/interview';
 
@@ -84,6 +85,12 @@ export function TodayPicker() {
         body: JSON.stringify({
           ...(overrideTemplate ? { templateId: overrideTemplate } : {}),
           items: picked,
+          problems: Object.fromEntries(
+            Object.entries(data.suggestedProblems ?? {}).map(([task, ps]) => [
+              task,
+              ps.map((p) => p.id),
+            ]),
+          ),
         }),
       });
       if (!res.ok) throw new Error();
@@ -146,8 +153,15 @@ export function TodayPicker() {
                     setPicked((p) => ({ ...p, [task.name]: id }));
                     setSwapping(null);
                   }}
-                  candidates={(data.choices ?? []).filter((c) =>
-                    (domainByTrack.get(task.track) ?? []).includes(c.domainId),
+                  problems={data.suggestedProblems?.[task.name] ?? []}
+                  candidates={(data.choices ?? []).filter(
+                    (c) =>
+                      (domainByTrack.get(task.track) ?? []).includes(
+                        c.domainId,
+                      ) &&
+                      // Respect the slot's module pool so 「Agent 题库」 doesn't
+                      // offer 「LLM 机制」 items. No pool → whole domain.
+                      (!task.pool || task.pool.includes(c.moduleId)),
                   )}
                 />
               ))}
@@ -238,6 +252,7 @@ function SlotRow({
   onToggleSwap,
   onPick,
   candidates,
+  problems,
 }: {
   task: PlanTaskLite;
   emoji: string;
@@ -249,6 +264,8 @@ function SlotRow({
   onToggleSwap: () => void;
   onPick: (id: string) => void;
   candidates: ItemChoiceLite[];
+  /** For 刷题 slots: the concrete problems picked for each checkbox. */
+  problems: SuggestedProblem[];
 }) {
   const [q, setQ] = useState('');
   const title =
@@ -303,6 +320,34 @@ function SlotRow({
             换
           </button>
         </div>
+
+        {problems.length > 0 && (
+          <ul className="mt-2 ml-6 space-y-1">
+            {problems.map((p) => (
+              <li key={p.id} className="text-[11px] leading-relaxed">
+                <span
+                  className={`inline-block px-1 rounded mr-1 ${
+                    p.kind === 'review'
+                      ? 'bg-amber-100 text-amber-800'
+                      : 'bg-sky-100 text-sky-800'
+                  }`}
+                >
+                  {p.kind === 'review' ? '复习' : '新题'}
+                </span>
+                <a
+                  href={p.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-stone-700 hover:text-indigo-700 underline decoration-stone-300 decoration-dotted underline-offset-2"
+                >
+                  #{p.id} {p.title}
+                </a>
+                <span className="text-stone-400"> · {p.difficulty}</span>
+                <span className="block text-stone-400 ml-6">{p.reason}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {isSwapping && (

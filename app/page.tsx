@@ -9,6 +9,7 @@ import { ArchiveEditor } from "@/components/ArchiveEditor";
 import { ArchivePreview } from "@/components/ArchivePreview";
 import { TrainingEditor } from "@/components/TrainingEditor";
 import { InterviewEditor } from "@/components/InterviewEditor";
+import { OverviewPane } from "@/components/interview/OverviewPane";
 import { ArchiveProvider } from "@/contexts/ArchiveContext";
 import { TrainingProvider } from "@/contexts/TrainingContext";
 import { InterviewProvider } from "@/contexts/InterviewContext";
@@ -61,7 +62,7 @@ export default function Home() {
     right = <ArchivePreview />;
   } else if (activeTab === 'interview') {
     middle = <InterviewEditor />;
-    right = undefined;
+    right = <OverviewPane />;
   } else {
     middle = <TrainingEditor />;
     right = undefined;

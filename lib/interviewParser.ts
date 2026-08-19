@@ -337,8 +337,18 @@ export function buildPartialTrailing(detail: PartialDetail): string {
   return full ? ` ${full}` : ' ';
 }
 
-/** Planned target parsed from a task label like "刷题 · LeetCode · 3 题". */
+/**
+ * Planned target parsed from a task label like
+ * "刷题 · 数组/双指针 · 3 题 · 45min" → "3 题".
+ * The trailing duration is skipped — the target is what you were supposed to
+ * produce, not how long it should take.
+ */
 export function parsePlannedTarget(label: string): string | undefined {
-  const parts = label.split(/[·•]/).map((p) => p.trim());
-  return parts.length > 1 ? parts[parts.length - 1] : undefined;
+  const parts = label
+    .split(/[·•]/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length < 2) return undefined;
+  const tail = parts.slice(1).filter((p) => !/^\d+\s*min$/i.test(p));
+  return tail.length > 0 ? tail[tail.length - 1] : undefined;
 }

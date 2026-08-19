@@ -100,6 +100,8 @@ export interface PlanTaskLite {
   target?: string;
   minutes?: number;
   note?: string;
+  /** Inventory module ids this slot draws from; [] means no item binding. */
+  pool?: string[];
 }
 
 export interface PlanDayLite {
@@ -127,6 +129,7 @@ export interface ItemChoiceLite {
   id: string;
   title: string;
   domainId: string;
+  moduleId: string;
   moduleLabel: string;
   touches: number;
   mastered: boolean;
@@ -140,8 +143,21 @@ export interface DomainLite {
   rolling?: boolean;
 }
 
+/** A concrete LeetCode problem picked for one checkbox of a 刷题 slot. */
+export interface SuggestedProblem {
+  id: number;
+  title: string;
+  url: string;
+  difficulty: string;
+  kind: 'review' | 'new';
+  /** Why this one, e.g. 「复习 · 6 个月前做过（当时磕磕绊绊）· 已逾期 174 天」. */
+  reason: string;
+}
+
 export interface TodayPlanResponse {
   today: string;
+  /** Task name → the problems recommended for its checkboxes, in order. */
+  suggestedProblems: Record<string, SuggestedProblem[]>;
   /** Prescription resolved from phase × weekday (or a date override). */
   suggestion?: PlanDayLite;
   /** All templates, so the user can override the suggestion. */
@@ -160,6 +176,8 @@ export interface CreateDayRequest {
   templateId?: string;
   /** Task name → inventory item id. */
   items?: Record<string, string>;
+  /** Task name → ordered LeetCode problem ids, one per checkbox. */
+  problems?: Record<string, number[]>;
 }
 
 export interface MasteryEntryLite {

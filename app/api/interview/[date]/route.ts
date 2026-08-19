@@ -11,6 +11,9 @@ import {
   resolveDayPlan,
 } from '@/lib/interviewPlan';
 import { flattenInventory, loadInventory, loadMastery } from '@/lib/interviewInventory';
+import path from 'path';
+import { loadLeetCode } from '@shared/interview/load';
+import { problemUnitText } from '@shared/interview/leetcode';
 import {
   CreateDayRequest,
   InterviewDayContentResponse,
@@ -22,6 +25,10 @@ type RouteContext = {
 };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+const DATA_DIR = path.dirname(
+  process.env.INTERVIEW_LOG_PATH || 'D:\\diary\\data\\interview\\log',
+);
 
 export async function GET(_req: Request, context: RouteContext) {
   try {
@@ -131,7 +138,20 @@ export async function POST(req: Request, context: RouteContext) {
       );
     }
 
-    const content = buildDayMarkdown(day, date, binding);
+    // 刷题 slots name their concrete problems on each checkbox line.
+    const unitTexts: Record<string, string[]> = {};
+    if (body.problems && Object.keys(body.problems).length > 0) {
+      const { bank } = await loadLeetCode(DATA_DIR);
+      const byId = new Map(bank.problems.map((p) => [p.id, p]));
+      for (const [task, ids] of Object.entries(body.problems)) {
+        unitTexts[task] = ids
+          .map((id) => byId.get(id))
+          .filter((p): p is NonNullable<typeof p> => !!p)
+          .map((p) => problemUnitText(p));
+      }
+    }
+
+    const content = buildDayMarkdown(day, date, binding, unitTexts);
     await createInterviewDay(date, content);
     const response: InterviewDayContentResponse = {
       dateStr: date,

@@ -84,6 +84,11 @@ export function buildDayMarkdown(
   day: PlanDayLite,
   dateStr: string,
   binding: ItemBinding = {},
+  /**
+   * Task name → per-unit text. Used by 刷题 slots so each checkbox names the
+   * concrete problem (`- [ ] #121 买卖股票的最佳时机`) instead of being blank.
+   */
+  unitTexts: Record<string, string[]> = {},
 ): string {
   const weekday = WEEKDAYS_CN[new Date(`${dateStr}T00:00:00`).getDay()];
   const lines: string[] = [];
@@ -100,7 +105,11 @@ export function buildDayMarkdown(
   lines.push('');
   for (const task of day.tasks ?? []) {
     lines.push(`- ${taskLabel(task, binding[task.name]?.title)}`);
-    for (let i = 0; i < Math.max(1, task.units); i++) lines.push('  - [ ] ');
+    const texts = unitTexts[task.name] ?? [];
+    const n = Math.max(1, task.units);
+    for (let i = 0; i < n; i++) {
+      lines.push(texts[i] ? `  - [ ] ${texts[i]}` : '  - [ ] ');
+    }
   }
   lines.push('');
   lines.push('> 笔记:');

@@ -111,6 +111,7 @@ export async function computeTouchCounts(): Promise<Record<string, number>> {
 export interface ItemChoice extends InvItem {
   domainId: string;
   domainLabel: string;
+  moduleId: string;
   moduleLabel: string;
   touches: number;
   mastered: boolean;
@@ -130,6 +131,7 @@ export function flattenInventory(
           ...it,
           domainId: d.id,
           domainLabel: d.label,
+          moduleId: m.id,
           moduleLabel: m.label,
           touches: touches[it.id] ?? 0,
           mastered: !!mastery[it.id],
@@ -141,26 +143,40 @@ export function flattenInventory(
 }
 
 /**
- * Suggest the next item to work on within a track.
+ * Suggest the next item to work on for a task slot.
+ *
+ * `pool` narrows the candidates to specific inventory modules — without it a
+ * day with two slots on the same track (e.g. 「Agent 题库」and「Agent 框架」)
+ * would draw both from the same undifferentiated domain. An empty `pool` means
+ * the slot deliberately has no inventory item (mocks, reviews, market work).
  *
  * Order: never-touched first (in inventory order), then least-touched.
- * Mastered items are never suggested. `exclude` keeps a single day from
- * suggesting the same item for two slots.
+ * Mastered items are never suggested. `exclude` keeps one day from suggesting
+ * the same item twice.
  */
 export function suggestForTrack(
   choices: ItemChoice[],
   inventory: Inventory,
   track: string,
   exclude: Set<string>,
+  pool?: string[],
 ): ItemChoice | undefined {
+  if (pool && pool.length === 0) return undefined;
+
   const domainIds = new Set(
     inventory.domains.filter((d) => d.track === track).map((d) => d.id),
   );
-  const pool = choices.filter(
-    (c) => domainIds.has(c.domainId) && !c.mastered && !exclude.has(c.id),
+  const modules = pool ? new Set(pool) : undefined;
+
+  const candidates = choices.filter(
+    (c) =>
+      domainIds.has(c.domainId) &&
+      (!modules || modules.has(c.moduleId)) &&
+      !c.mastered &&
+      !exclude.has(c.id),
   );
-  if (pool.length === 0) return undefined;
-  const untouched = pool.find((c) => c.touches === 0);
+  if (candidates.length === 0) return undefined;
+  const untouched = candidates.find((c) => c.touches === 0);
   if (untouched) return untouched;
-  return [...pool].sort((a, b) => a.touches - b.touches)[0];
+  return [...candidates].sort((a, b) => a.touches - b.touches)[0];
 }

@@ -18,13 +18,21 @@ import {
   InterviewBlock,
   InterviewDayDoc,
   OVERALL_NOTE_NAME,
+  TaskUnit,
   UnitStatus,
   taskName,
 } from '@/types/interview';
 import { parsePlannedTarget } from '@/lib/interviewParser';
+import {
+  OUTCOME_LABEL,
+  OUTCOME_ORDER,
+  Outcome,
+  parseProblemUnit,
+} from '@shared/interview/leetcode';
 import { TodayPicker } from './interview/TodayPicker';
 import { UnitChip } from './interview/UnitChip';
 import { TaskNote } from './interview/TaskNote';
+import { ProblemOutcome } from './interview/ProblemOutcome';
 import { usePullToRefresh } from './training/usePullToRefresh';
 
 const PTR_THRESHOLD = 60;
@@ -331,6 +339,87 @@ function DayCard({
   );
 }
 
+/**
+ * One checkbox of a 刷题 slot, bound to a concrete problem.
+ *
+ * Recording an outcome does two things at once: it writes the attempt to
+ * leetcode-log.json (which drives the spaced repetition schedule) and it
+ * rewrites this line's text so the markdown stays self-describing.
+ */
+function ProblemUnitRow({
+  index,
+  unit,
+  parsed,
+  dateStr,
+  onChange,
+}: {
+  index: number;
+  unit: TaskUnit;
+  parsed: { id: number; outcome?: Outcome } | null;
+  dateStr: string;
+  onChange: (status: UnitStatus, trailing?: string) => void;
+}) {
+  if (!parsed) {
+    return (
+      <div className="flex items-start gap-3">
+        <UnitChip
+          index={index}
+          status={unit.status}
+          trailing={unit.trailing}
+          onChange={onChange}
+        />
+        <span className="text-sm text-stone-500 mt-2.5">{unit.trailing.trim() || '（未指定题目）'}</span>
+      </div>
+    );
+  }
+
+  // "#121 两数之和 · 比较完美" → head is everything before the outcome label.
+  const raw = unit.trailing.trim();
+  const head = OUTCOME_ORDER.reduce(
+    (acc, o) => acc.replace(new RegExp(`\\s*·\\s*${OUTCOME_LABEL[o]}$`), ''),
+    raw,
+  );
+  const title = head.replace(/^#\d+\s*/, '');
+
+  const apply = (outcome: Outcome | null) => {
+    if (!outcome) {
+      onChange('pending', ` ${head}`);
+      return;
+    }
+    onChange(outcome === 'clean' ? 'done' : 'partial', ` ${head} · ${OUTCOME_LABEL[outcome]}`);
+  };
+
+  return (
+    <div className="rounded-lg border border-stone-200 bg-stone-50/60 px-3 py-2">
+      <div className="flex items-start gap-2">
+        <span className="text-[11px] font-mono text-stone-400 mt-0.5 w-4 shrink-0">
+          {index}
+        </span>
+        <div className="flex-1 min-w-0">
+          <p
+            className={`text-sm leading-snug ${
+              unit.status === 'done'
+                ? 'text-stone-400 line-through'
+                : 'text-stone-800'
+            }`}
+          >
+            <span className="font-mono text-stone-500">#{parsed.id}</span>{' '}
+            {title}
+          </p>
+          <ProblemOutcome
+            problemId={parsed.id}
+            title={title}
+            url={`https://leetcode.cn/problems/?q=${parsed.id}`}
+            current={parsed.outcome}
+            date={dateStr}
+            onRecorded={apply}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** "标记已掌握" toggle — the only way an inventory item reaches 已掌握. */
 function MasteryToggle({
   itemId,
@@ -429,6 +518,11 @@ function BlockRow({
     const doneCount = block.units.filter((u) => u.status !== 'pending').length;
     const total = block.units.length;
     const allDone = doneCount === total && total > 0;
+    // A 刷题 slot names a concrete problem on each checkbox; those rows get the
+    // four-way outcome recorder instead of the generic done/partial chip.
+    const parsed = block.units.map((u) => parseProblemUnit(u.trailing));
+    const hasProblems = parsed.some((p) => p !== null);
+
     return (
       <div className="py-3">
         <div className="flex items-baseline justify-between gap-3 mb-2">
@@ -447,20 +541,37 @@ function BlockRow({
             {doneCount}/{total}
           </span>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {block.units.map((unit, unitIdx) => (
-            <UnitChip
-              key={unitIdx}
-              index={unitIdx + 1}
-              status={unit.status}
-              trailing={unit.trailing}
-              plannedTarget={parsePlannedTarget(block.label)}
-              onChange={(s, t) =>
-                onToggleUnitStatus(dateStr, blockIdx, unitIdx, s, t)
-              }
-            />
-          ))}
-        </div>
+        {hasProblems ? (
+          <div className="space-y-2">
+            {block.units.map((unit, unitIdx) => (
+              <ProblemUnitRow
+                key={unitIdx}
+                index={unitIdx + 1}
+                unit={unit}
+                parsed={parsed[unitIdx]}
+                dateStr={dateStr}
+                onChange={(s, t) =>
+                  onToggleUnitStatus(dateStr, blockIdx, unitIdx, s, t)
+                }
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {block.units.map((unit, unitIdx) => (
+              <UnitChip
+                key={unitIdx}
+                index={unitIdx + 1}
+                status={unit.status}
+                trailing={unit.trailing}
+                plannedTarget={parsePlannedTarget(block.label)}
+                onChange={(s, t) =>
+                  onToggleUnitStatus(dateStr, blockIdx, unitIdx, s, t)
+                }
+              />
+            ))}
+          </div>
+        )}
         <MasteryToggle
           itemId={itemsByTask[name]}
           mastery={mastery}
