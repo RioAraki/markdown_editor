@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   Check,
+  ExternalLink,
   Loader2,
   RefreshCw,
   Save,
@@ -73,6 +74,16 @@ export function InterviewEditor() {
   // problemId → 中文专题名. Only used to reveal what an already-attempted
   // problem was testing; never shown before an outcome is recorded.
   const [problemTopic, setProblemTopic] = useState<Record<number, string>>({});
+  const [links, setLinks] = useState<{
+    tasks: Record<string, string>;
+    problems: Record<number, string>;
+  }>({ tasks: {}, problems: {} });
+  useEffect(() => {
+    fetch('/api/interview/tasklinks')
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then(setLinks)
+      .catch(() => {});
+  }, []);
   useEffect(() => {
     let cancelled = false;
     fetch('/api/interview/leetcode')
@@ -217,6 +228,7 @@ export function InterviewEditor() {
                 day={day}
                 isToday={day.dateStr === today}
                 problemTopic={problemTopic}
+                links={links}
                 onToggleTaskStatus={toggleTaskStatus}
                 onToggleUnitStatus={toggleUnitStatus}
                 onUpdateNoteEntry={updateNoteEntry}
@@ -235,6 +247,7 @@ function DayCard({
   day,
   isToday,
   problemTopic,
+  links,
   onToggleTaskStatus,
   onToggleUnitStatus,
   onUpdateNoteEntry,
@@ -243,6 +256,7 @@ function DayCard({
   day: InterviewDayDoc;
   isToday: boolean;
   problemTopic: Record<number, string>;
+  links: { tasks: Record<string, string>; problems: Record<number, string> };
 } & Handlers) {
   const { done, total } = dayProgress(day);
 
@@ -303,6 +317,7 @@ function DayCard({
               dateStr={day.dateStr}
               blockIdx={blockIdx}
               problemTopic={problemTopic}
+              links={links}
               notesBlockIdx={notesBlockIdx}
               noteValue={
                 block.kind === 'task' || block.kind === 'task-units'
@@ -372,6 +387,7 @@ function BlockRow({
   dateStr,
   blockIdx,
   problemTopic,
+  links,
   notesBlockIdx,
   noteValue,
   onToggleTaskStatus,
@@ -383,6 +399,7 @@ function BlockRow({
   dateStr: string;
   blockIdx: number;
   problemTopic: Record<number, string>;
+  links: { tasks: Record<string, string>; problems: Record<number, string> };
   notesBlockIdx: number;
   noteValue: string;
 } & Handlers) {
@@ -396,6 +413,17 @@ function BlockRow({
           }`}
         >
           {block.label}
+          {links.tasks[name] && (
+            <a
+              href={links.tasks[name]}
+              target="_blank"
+              rel="noreferrer"
+              title="打开这一项的网站"
+              className="ml-1.5 inline-flex align-middle text-stone-400 hover:text-indigo-600"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          )}
         </p>
         <UnitRecord
           index={1}
@@ -432,6 +460,17 @@ function BlockRow({
             }`}
           >
             {displayLabel(block.label, isProblemBlock, problemTopic)}
+            {links.tasks[name] && (
+              <a
+                href={links.tasks[name]}
+                target="_blank"
+                rel="noreferrer"
+                title="打开这一项的网站"
+                className="ml-1.5 inline-flex align-middle text-stone-400 hover:text-indigo-600"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            )}
           </p>
           <span
             className={`text-[11px] font-mono shrink-0 ${
@@ -450,6 +489,7 @@ function BlockRow({
               trailing={unit.trailing}
               dateStr={dateStr}
               problemTopic={problemTopic}
+              problemUrl={links.problems}
               onChange={(s, t) =>
                 onToggleUnitStatus(dateStr, blockIdx, unitIdx, s, t)
               }

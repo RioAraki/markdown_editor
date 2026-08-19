@@ -102,6 +102,7 @@ export function UnitRecord({
   trailing,
   dateStr,
   problemTopic,
+  problemUrl,
   onChange,
 }: {
   index: number;
@@ -114,6 +115,8 @@ export function UnitRecord({
    * you it's a sliding-window problem before you solve it is half the answer.
    */
   problemTopic?: Record<number, string>;
+  /** problemId → 真实题目页地址（题库带的），比搜索页直达。 */
+  problemUrl?: Record<number, string>;
   onChange: (status: UnitStatus, trailing: string) => void;
 }) {
   const parts = decompose(trailing);
@@ -246,7 +249,11 @@ export function UnitRecord({
                   <Loader2 className="w-3 h-3 animate-spin text-stone-400" />
                 )}
                 <a
-                  href={`https://leetcode.cn/problems/?q=${parts.problemId}`}
+                  href={
+                    (parts.problemId !== undefined &&
+                      problemUrl?.[parts.problemId]) ||
+                    `https://leetcode.cn/problems/?q=${parts.problemId}`
+                  }
                   target="_blank"
                   rel="noreferrer"
                   onClick={(e) => e.stopPropagation()}

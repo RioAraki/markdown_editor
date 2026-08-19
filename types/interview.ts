@@ -102,6 +102,8 @@ export interface PlanTaskLite {
   note?: string;
   /** Inventory module ids this slot draws from; [] means no item binding. */
   pool?: string[];
+  /** Direct link for this slot (题库站 / LeetCode). */
+  url?: string;
 }
 
 export interface PlanDayLite {
