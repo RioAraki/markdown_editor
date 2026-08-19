@@ -301,6 +301,28 @@ export function setUnitStatus(
   return { ...doc, blocks };
 }
 
+/**
+ * Append one more checkbox to a task.
+ *
+ * The day plan sets a target, not a ceiling — on a good day you should be able
+ * to take another problem without editing the file by hand.
+ */
+export function addUnit(
+  doc: InterviewDayDoc,
+  blockIdx: number,
+  trailing: string,
+): InterviewDayDoc {
+  const blocks = doc.blocks.map((block, bi) => {
+    if (bi !== blockIdx || block.kind !== 'task-units') return block;
+    const indent = block.units[0]?.indent ?? '  ';
+    return {
+      ...block,
+      units: [...block.units, { status: 'pending' as UnitStatus, indent, trailing }],
+    };
+  });
+  return { ...doc, blocks };
+}
+
 export function setNoteEntry(
   doc: InterviewDayDoc,
   blockIdx: number,

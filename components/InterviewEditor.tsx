@@ -23,6 +23,7 @@ import {
 import { TodayPicker } from './interview/TodayPicker';
 import { UnitRecord } from './interview/UnitRecord';
 import { TaskNote } from './interview/TaskNote';
+import { AddProblem } from './interview/AddProblem';
 import { usePullToRefresh } from './training/usePullToRefresh';
 
 const PTR_THRESHOLD = 60;
@@ -47,6 +48,7 @@ interface Handlers {
     name: string,
     note: string,
   ) => void;
+  onAppendUnit: (dateStr: string, blockIdx: number, trailing: string) => void;
 }
 
 export function InterviewEditor() {
@@ -60,6 +62,7 @@ export function InterviewEditor() {
     toggleTaskStatus,
     toggleUnitStatus,
     updateNoteEntry,
+    appendUnit,
     saveNow,
     refresh,
   } = useInterview();
@@ -217,6 +220,7 @@ export function InterviewEditor() {
                 onToggleTaskStatus={toggleTaskStatus}
                 onToggleUnitStatus={toggleUnitStatus}
                 onUpdateNoteEntry={updateNoteEntry}
+                onAppendUnit={appendUnit}
               />
             ))}
             <div className="h-[40vh]" />
@@ -234,6 +238,7 @@ function DayCard({
   onToggleTaskStatus,
   onToggleUnitStatus,
   onUpdateNoteEntry,
+  onAppendUnit,
 }: {
   day: InterviewDayDoc;
   isToday: boolean;
@@ -307,6 +312,7 @@ function DayCard({
               onToggleTaskStatus={onToggleTaskStatus}
               onToggleUnitStatus={onToggleUnitStatus}
               onUpdateNoteEntry={onUpdateNoteEntry}
+              onAppendUnit={onAppendUnit}
             />
           );
         })}
@@ -371,6 +377,7 @@ function BlockRow({
   onToggleTaskStatus,
   onToggleUnitStatus,
   onUpdateNoteEntry,
+  onAppendUnit,
 }: {
   block: InterviewBlock;
   dateStr: string;
@@ -449,6 +456,13 @@ function BlockRow({
             />
           ))}
         </div>
+        {isProblemBlock && (
+          <AddProblem
+            units={block.units}
+            problemTopic={problemTopic}
+            onAdd={(trailing) => onAppendUnit(dateStr, blockIdx, trailing)}
+          />
+        )}
         {notesBlockIdx >= 0 && (
           <TaskNote
             value={noteValue}

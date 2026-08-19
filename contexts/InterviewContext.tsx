@@ -10,6 +10,7 @@ import React, {
 } from 'react';
 import { InterviewDayDoc, UnitStatus } from '@/types/interview';
 import {
+  addUnit,
   ensureNotesBlock,
   parseInterviewDayDoc,
   serializeInterviewDayDoc,
@@ -44,6 +45,8 @@ interface InterviewContextType {
     name: string,
     note: string,
   ) => void;
+  /** Append one more checkbox to a task — for days when there's extra time. */
+  appendUnit: (dateStr: string, blockIdx: number, trailing: string) => void;
   saveNow: () => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -142,6 +145,13 @@ export function InterviewProvider({ children }: { children: React.ReactNode }) {
     [updateDay],
   );
 
+  const appendUnit = useCallback(
+    (dateStr: string, blockIdx: number, trailing: string) => {
+      updateDay(dateStr, (doc) => addUnit(doc, blockIdx, trailing));
+    },
+    [updateDay],
+  );
+
   const saveNowRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
   const saveNow = useCallback(async () => {
@@ -209,6 +219,7 @@ export function InterviewProvider({ children }: { children: React.ReactNode }) {
     toggleTaskStatus,
     toggleUnitStatus,
     updateNoteEntry,
+    appendUnit,
     saveNow,
     refresh: fetchDays,
   };
