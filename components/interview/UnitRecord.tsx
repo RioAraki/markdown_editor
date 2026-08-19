@@ -1,14 +1,16 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ExternalLink, Loader2 } from 'lucide-react';
+import { ExternalLink, Loader2, RotateCcw } from 'lucide-react';
 import {
   OUTCOME_HINT,
   OUTCOME_LABEL,
   OUTCOME_ORDER,
   Outcome,
+  REDO_LABEL,
   nextInterval,
   parseProblemRecord,
+  redoHintIn,
 } from '@shared/interview/leetcode';
 import { UnitStatus } from '@/types/interview';
 
@@ -68,24 +70,37 @@ function decompose(trailing: string): {
   problemId?: number;
   head: string;
   outcome?: Outcome;
+  redo: boolean;
   note: string;
 } {
   const raw = trailing.trim();
   const rec = parseProblemRecord(raw);
   // A non-problem slot has no id and no outcome — the whole line is the note.
-  if (!rec) return { head: '', note: raw };
-  return { problemId: rec.id, head: rec.head, outcome: rec.outcome, note: rec.note };
+  if (!rec) return { head: '', redo: false, note: raw };
+  return {
+    problemId: rec.id,
+    head: rec.head,
+    outcome: rec.outcome,
+    redo: rec.redo,
+    note: rec.note,
+  };
 }
 
 function compose(
   head: string,
   outcome: Outcome | undefined,
+  redo: boolean,
   note: string,
 ): string {
   // A checkbox is exactly one markdown line. A newline in the note would end
   // the list item and orphan every later unit, so fold them into separators.
   const flat = note.replace(/\s*[\r\n]+\s*/g, ' / ').trim();
-  const parts = [head, outcome ? OUTCOME_LABEL[outcome] : '', flat]
+  const parts = [
+    head,
+    outcome ? OUTCOME_LABEL[outcome] : '',
+    redo ? REDO_LABEL : '',
+    flat,
+  ]
     .map((p) => p.trim())
     .filter(Boolean);
   return parts.length > 0 ? ` ${parts.join(' · ')}` : ' ';
@@ -132,7 +147,7 @@ export function UnitRecord({
     if (!open) setNote(decompose(trailing).note);
   }, [trailing, open]);
 
-  const recordAttempt = async (outcome: Outcome | null) => {
+  const recordAttempt = async (outcome: Outcome | null, redo?: boolean) => {
     if (!isProblem) return;
     setSaving(true);
     setError(false);
@@ -143,6 +158,7 @@ export function UnitRecord({
         body: JSON.stringify({
           problemId: parts.problemId,
           outcome,
+          redo: redo ?? parts.redo,
           date: dateStr,
           note: note.trim() || undefined,
         }),
@@ -162,17 +178,24 @@ export function UnitRecord({
     const next = parts.outcome === o ? undefined : o;
     onChange(
       next ? (next === 'clean' ? 'done' : 'partial') : 'pending',
-      compose(parts.head, next, note),
+      compose(parts.head, next, parts.redo, note),
     );
     await recordAttempt(next ?? null);
   };
 
+  const toggleRedo = async () => {
+    const next = !parts.redo;
+    onChange(status, compose(parts.head, parts.outcome, next, note));
+    // Only meaningful once there is an attempt to attach it to.
+    if (parts.outcome) await recordAttempt(parts.outcome, next);
+  };
+
   const pickStatus = (s: UnitStatus) => {
-    onChange(s, compose(parts.head, parts.outcome, note));
+    onChange(s, compose(parts.head, parts.outcome, parts.redo, note));
   };
 
   const commitNote = () => {
-    onChange(status, compose(parts.head, parts.outcome, note));
+    onChange(status, compose(parts.head, parts.outcome, parts.redo, note));
   };
 
   const chipColor =
@@ -183,6 +206,9 @@ export function UnitRecord({
         : 'bg-white text-stone-500 border-stone-300 hover:border-stone-500';
 
   const summary = parts.note || (parts.outcome ? OUTCOME_LABEL[parts.outcome] : '');
+  // You often say "值得重做" in the note without pressing anything — surface
+  // the button when you do, but let the press be yours.
+  const hintPhrase = isProblem && !parts.redo ? redoHintIn(note) : null;
 
   return (
     <div className="rounded-lg border border-stone-200 bg-stone-50/60">
@@ -206,8 +232,13 @@ export function UnitRecord({
               <span className="text-stone-400 italic">点开记录做了什么</span>
             )}
           </span>
-          {summary && (
+          {(summary || parts.redo) && (
             <span className="block text-[11px] text-stone-500 mt-0.5 truncate">
+              {parts.redo && (
+                <span className="mr-1 px-1 rounded bg-rose-100 text-rose-700 font-medium">
+                  待重做
+                </span>
+              )}
               {summary}
             </span>
           )}
@@ -246,6 +277,26 @@ export function UnitRecord({
                 {saving && (
                   <Loader2 className="w-3 h-3 animate-spin text-stone-400" />
                 )}
+                <button
+                  type="button"
+                  onClick={toggleRedo}
+                  disabled={saving}
+                  title={
+                    parts.redo
+                      ? '已标记待重做，会插到复习队列最前面。再点一下取消'
+                      : '标记这题要重做 —— 一周内回到推荐里，理由用你写的备注'
+                  }
+                  className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border transition-colors disabled:opacity-50 ${
+                    parts.redo
+                      ? 'bg-rose-600 text-white border-rose-600'
+                      : hintPhrase
+                        ? 'bg-rose-50 text-rose-700 border-rose-400 ring-2 ring-rose-200 hover:bg-rose-100'
+                        : 'bg-white text-stone-500 border-stone-300 hover:border-rose-400 hover:text-rose-600'
+                  }`}
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  {parts.redo ? '待重做' : '标记重做'}
+                </button>
                 <a
                   href={
                     (parts.problemId !== undefined &&
@@ -272,16 +323,24 @@ export function UnitRecord({
                       </p>
                     )}
                   <p className="text-[10px] text-stone-400">
-                    {parts.outcome === 'clean'
-                      ? '连续两次完美且间隔超过 90 天才退出轮转'
-                      : `约 ${nextInterval(undefined, parts.outcome)} 天后会再出现在推荐里`}
-                    {parts.outcome === 'suboptimal' &&
+                    {parts.redo
+                      ? '已标记待重做 · 一周内回到推荐里，并排在复习队列最前'
+                      : parts.outcome === 'clean'
+                        ? '连续两次完美且间隔超过 90 天才退出轮转'
+                        : `约 ${nextInterval(undefined, parts.outcome)} 天后会再出现在推荐里`}
+                    {!parts.redo &&
+                      parts.outcome === 'suboptimal' &&
                       ' · 掌握有偏差，进度条按未掌握算'}
                   </p>
                 </div>
               ) : (
                 <p className="text-[10px] text-stone-400 mt-1">
                   先做，做完记录结果后才会揭晓这题考察什么
+                </p>
+              )}
+              {hintPhrase && (
+                <p className="text-[11px] text-rose-700 mt-1.5">
+                  你写了「{hintPhrase}」——要标记成待重做吗？
                 </p>
               )}
               {error && (

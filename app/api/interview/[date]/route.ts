@@ -65,7 +65,9 @@ export async function GET(_req: Request, context: RouteContext) {
 }
 
 const same = (a?: Attempt, b?: Attempt) =>
-  a?.outcome === b?.outcome && (a?.note ?? '') === (b?.note ?? '');
+  a?.outcome === b?.outcome &&
+  (a?.note ?? '') === (b?.note ?? '') &&
+  !a?.redo === !b?.redo;
 
 /**
  * Make leetcode-log.json agree with what the day file says about `date`.

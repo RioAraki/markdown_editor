@@ -65,6 +65,7 @@ export async function PUT(req: Request) {
       outcome?: Outcome | null;
       date?: string;
       note?: string;
+      redo?: boolean;
     } = await req.json();
 
     if (typeof body.problemId !== 'number') {
@@ -85,6 +86,7 @@ export async function PUT(req: Request) {
     if (body.outcome && OUTCOME_ORDER.includes(body.outcome)) {
       const attempt: Attempt = { date, outcome: body.outcome };
       if (body.note) attempt.note = body.note;
+      if (body.redo) attempt.redo = true;
       entry.attempts.push(attempt);
     }
     entry.attempts.sort((a, b) => a.date.localeCompare(b.date));

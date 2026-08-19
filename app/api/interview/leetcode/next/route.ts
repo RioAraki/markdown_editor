@@ -2,7 +2,11 @@ import { NextResponse } from 'next/server';
 import path from 'path';
 import { format } from 'date-fns';
 import { loadLeetCode } from '@shared/interview/load';
-import { problemUnitText, recommendProblems } from '@shared/interview/leetcode';
+import {
+  allProblemStates,
+  problemUnitText,
+  recommendProblems,
+} from '@shared/interview/leetcode';
 
 const DATA_DIR = path.dirname(
   process.env.INTERVIEW_LOG_PATH || 'D:\\diary\\data\\interview\\log',
@@ -22,17 +26,25 @@ export async function POST(req: Request) {
 
     const { bank, log } = await loadLeetCode(DATA_DIR);
     const today = format(new Date(), 'yyyy-MM-dd');
+    const exclude = new Set(body.exclude ?? []);
+    const count = Math.min(Math.max(body.count ?? 1, 1), 5);
+
+    // An extra problem should clear a redo you flagged yourself before it goes
+    // looking for new material — that flag is the strongest signal there is.
+    // Otherwise the bonus problem is new, which is the point of extra time.
+    const flaggedWaiting = allProblemStates(bank, log, today).some(
+      (s) => s.redo && !s.stale && s.status === 'due' && !exclude.has(s.problem.id),
+    );
 
     const recs = recommendProblems({
       bank,
       log,
       itemId: null, // pick across every topic
-      count: Math.min(Math.max(body.count ?? 1, 1), 5),
+      count,
       today,
-      exclude: new Set(body.exclude ?? []),
+      exclude,
       avoidTopics: new Set(body.topics ?? []),
-      // An extra problem is for extra learning, so bias hard to new material.
-      reviewQuota: 0,
+      reviewQuota: flaggedWaiting ? 1 : 0,
     });
 
     return NextResponse.json({
@@ -43,6 +55,7 @@ export async function POST(req: Request) {
         difficulty: r.problem.difficulty,
         item: r.problem.item,
         kind: r.kind,
+        flagged: r.flagged,
         reason: r.reason,
         unitText: problemUnitText(r.problem),
       })),

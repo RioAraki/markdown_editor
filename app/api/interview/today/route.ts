@@ -79,6 +79,7 @@ export async function GET() {
         url: r.problem.url,
         difficulty: r.problem.difficulty,
         kind: r.kind,
+        flagged: r.flagged,
         reason: r.reason,
       }));
     }

@@ -149,7 +149,16 @@ export function OverviewPane() {
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[11px] text-stone-500">
-            刷题待复习{' '}
+            {model.debt.flagged > 0 && (
+              <>
+                待重做{' '}
+                <span className="font-mono font-semibold text-rose-600">
+                  {model.debt.flagged}
+                </span>{' '}
+                ·{' '}
+              </>
+            )}
+            待复习{' '}
             <span
               className={`font-mono font-semibold ${
                 model.debt.due > 0 ? 'text-amber-600' : 'text-stone-600'

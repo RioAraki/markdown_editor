@@ -152,6 +152,8 @@ export interface SuggestedProblem {
   url: string;
   difficulty: string;
   kind: 'review' | 'new';
+  /** 你亲手标记的待重做，而不只是到期了。 */
+  flagged?: boolean;
   /** Why this one, e.g. 「复习 · 6 个月前做过（当时磕磕绊绊）· 已逾期 174 天」. */
   reason: string;
 }

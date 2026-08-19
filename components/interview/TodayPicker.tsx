@@ -333,12 +333,14 @@ function SlotRow({
               <li key={p.id} className="text-[11px] leading-relaxed">
                 <span
                   className={`inline-block px-1 rounded mr-1 ${
-                    p.kind === 'review'
-                      ? 'bg-amber-100 text-amber-800'
-                      : 'bg-sky-100 text-sky-800'
+                    p.flagged
+                      ? 'bg-rose-100 text-rose-800 font-medium'
+                      : p.kind === 'review'
+                        ? 'bg-amber-100 text-amber-800'
+                        : 'bg-sky-100 text-sky-800'
                   }`}
                 >
-                  {p.kind === 'review' ? '复习' : '新题'}
+                  {p.flagged ? '待重做' : p.kind === 'review' ? '重做' : '新题'}
                 </span>
                 <a
                   href={p.url}
