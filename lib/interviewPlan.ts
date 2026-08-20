@@ -1,4 +1,5 @@
 import fs from 'fs/promises';
+import type { PlanBlock } from '@shared/interview/types';
 import path from 'path';
 import { PlanDayLite, PlanTaskLite } from '@/types/interview';
 
@@ -34,6 +35,9 @@ interface RawPlan {
   trackTypes?: Record<string, { emoji: string; label: string }>;
   weeks?: RawWeek[];
   templates?: (PlanDayLite & { id: string })[];
+  /** The block catalog a day is assembled from. */
+  blocks?: PlanBlock[];
+  presets?: { id: string; label: string; note?: string; blocks: string[] }[];
   schedule?: Record<string, Record<string, string>>;
   dayOverrides?: Record<string, PlanDayLite>;
 }

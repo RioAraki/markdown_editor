@@ -11,6 +11,7 @@ import {
 } from '@/lib/interviewInventory';
 import { loadLeetCode, loadQBank } from '@shared/interview/load';
 import { recommendQuestions } from '@shared/interview/qbank';
+import { dayFromBlocks } from '@shared/interview/core';
 import { recommendProblems } from '@shared/interview/leetcode';
 import { TodayPlanResponse } from '@/types/interview';
 
@@ -18,7 +19,7 @@ const DATA_DIR = path.dirname(
   process.env.INTERVIEW_LOG_PATH || 'D:\\diary\\data\\interview\\log',
 );
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const [plan, inventory, mastery, touches, leetcode, qbank] = await Promise.all([
       loadPlan(),
@@ -39,7 +40,14 @@ export async function GET() {
     }
 
     const today = format(new Date(), 'yyyy-MM-dd');
-    const suggestion = resolveDayPlan(plan, today);
+
+    // A day assembled by hand wins over the phase×weekday prescription — the
+    // whole point of the catalog is that tonight's choice is yours.
+    const picked = new URL(req.url).searchParams.get('blocks');
+    const blockIds = picked ? picked.split(',').filter(Boolean) : [];
+    const suggestion = blockIds.length
+      ? dayFromBlocks(plan.blocks ?? [], blockIds, '自选')
+      : resolveDayPlan(plan, today);
     const week = weekOf(plan, today);
 
     const choices = flattenInventory(inventory, touches, mastery);

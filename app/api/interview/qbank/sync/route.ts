@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
 import { loadQBank } from '@shared/interview/load';
+import { questionKey } from '@shared/interview/qbank';
 import type { Question, QuestionBank } from '@shared/interview/qbank';
 
 const DATA_DIR = path.dirname(
@@ -51,8 +52,13 @@ export async function POST() {
     const changed: string[] = [];
     for (const q of up.questions) {
       const url = `${SITE}practice.html#question=${encodeURIComponent(q.question)}`;
+      // Upstream ids collide (240 questions, 200 ids), and archive files are
+      // named by id — so the local id is always derived from the text.
+      const group = /^(\d{2})/.exec(q.id)?.[1];
+      const id = questionKey(q.question, group);
       const next: Question = {
-        id: q.id,
+        id,
+        upstreamId: q.id,
         category: q.category,
         question: q.question,
         answer: q.answer,
@@ -62,12 +68,12 @@ export async function POST() {
         sourceFile: q.source ?? null,
         url,
       };
-      const prev = existing.get(q.id);
-      if (!prev) added.push(q.id);
+      const prev = existing.get(id);
+      if (!prev) added.push(id);
       else if (prev.question !== next.question || prev.answer !== next.answer) {
-        changed.push(q.id);
+        changed.push(id);
       }
-      existing.set(q.id, next);
+      existing.set(id, next);
     }
 
     const merged: QuestionBank = {

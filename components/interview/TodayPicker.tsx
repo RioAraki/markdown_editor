@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   CalendarPlus,
   ChevronDown,
+  Clock,
   Loader2,
   RefreshCw,
   Search,
@@ -11,6 +12,8 @@ import {
 import { useInterview } from '@/contexts/InterviewContext';
 import { getTodayDate } from '@/lib/dateUtils';
 import {
+  BlockLite,
+  BlocksResponse,
   ItemChoiceLite,
   PlanDayLite,
   PlanTaskLite,
@@ -25,8 +28,10 @@ export function TodayPicker() {
   const todayExists = days.some((d) => d.dateStr === today);
 
   const [data, setData] = useState<TodayPlanResponse | null>(null);
-  const [overrideTemplate, setOverrideTemplate] = useState<string | undefined>();
-  const [showTemplates, setShowTemplates] = useState(false);
+  const [menu, setMenu] = useState<BlocksResponse | null>(null);
+  /** Block ids that make up tonight. Required ones start checked. */
+  const [chosenBlocks, setChosenBlocks] = useState<string[]>([]);
+  const [showMenu, setShowMenu] = useState(false);
   /** Task name → chosen item id. Starts from the server's suggestions. */
   const [picked, setPicked] = useState<Record<string, string>>({});
   const [swapping, setSwapping] = useState<string | null>(null);
@@ -36,7 +41,28 @@ export function TodayPicker() {
   useEffect(() => {
     if (todayExists) return;
     let cancelled = false;
-    fetch('/api/interview/today')
+    fetch('/api/interview/blocks')
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d: BlocksResponse) => {
+        if (cancelled) return;
+        setMenu(d);
+        setChosenBlocks((cur) =>
+          cur.length ? cur : d.blocks.filter((b) => b.required).map((b) => b.id),
+        );
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [todayExists]);
+
+  // Re-plan whenever the composition changes: which problems and questions get
+  // picked depends on which blocks are in the day.
+  useEffect(() => {
+    if (todayExists) return;
+    let cancelled = false;
+    const qs = chosenBlocks.length ? `?blocks=${chosenBlocks.join(',')}` : '';
+    fetch(`/api/interview/today${qs}`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((d: TodayPlanResponse) => {
         if (cancelled) return;
@@ -51,11 +77,9 @@ export function TodayPicker() {
     return () => {
       cancelled = true;
     };
-  }, [todayExists]);
+  }, [todayExists, chosenBlocks]);
 
-  const chosen: PlanDayLite | undefined = overrideTemplate
-    ? data?.templates.find((t) => t.id === overrideTemplate)
-    : data?.suggestion;
+  const chosen: PlanDayLite | undefined = data?.suggestion;
 
   // Look up any item by id, including ones swapped in manually.
   const choiceById = useMemo(() => {
@@ -84,7 +108,8 @@ export function TodayPicker() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...(overrideTemplate ? { templateId: overrideTemplate } : {}),
+          blocks: chosenBlocks,
+          title: presetLabel(menu, chosenBlocks),
           items: picked,
           problems: Object.fromEntries(
             Object.entries(data.suggestedProblems ?? {}).map(([task, ps]) => [
@@ -109,7 +134,7 @@ export function TodayPicker() {
     }
   };
 
-  if (!chosen && data.templates.length === 0) {
+  if (!chosen && (menu?.blocks.length ?? 0) === 0) {
     return (
       <section className="bg-white rounded-lg border border-stone-200 p-4 text-sm text-stone-500">
         还没有求职准备计划。请先创建{' '}
@@ -128,15 +153,23 @@ export function TodayPicker() {
         <p className="text-xs text-stone-500 mt-0.5">
           {today} 还没有记录
           {data.week && ` · W${data.week.n} ${data.week.theme}`}
-          {chosen && ` · ${chosen.title}`}
         </p>
+        {menu && missingRequired(menu, chosenBlocks).length > 0 && (
+          <p className="text-[11px] text-amber-700 mt-1">
+            没排{' '}
+            {missingRequired(menu, chosenBlocks)
+              .map((b) => b.name)
+              .join('、')}
+            —— 这项基本上是每天都该有的
+          </p>
+        )}
       </header>
 
       <div className="p-4 space-y-3">
         {chosen?.tasks && chosen.tasks.length > 0 ? (
           <>
             <p className="text-xs text-stone-500">
-              已按清单自动排好，每项都能换。
+              下面每项的具体内容都是自动挑的，也都能换。
             </p>
             <div className="space-y-2">
               {chosen.tasks.map((task) => (
@@ -177,53 +210,71 @@ export function TodayPicker() {
           </>
         ) : (
           <p className="text-sm text-stone-500">
-            今天不在 12 周计划期内，手动选一个模板。
+            今天还什么都没选。展开下面的清单挑几项，或者点一个快捷组合。
           </p>
         )}
 
-        {data.templates.length > 0 && (
+        {menu && (
           <>
             <button
               type="button"
-              onClick={() => setShowTemplates((v) => !v)}
+              onClick={() => setShowMenu((v) => !v)}
               className="inline-flex items-center gap-1 text-xs text-stone-500 hover:text-stone-800"
             >
               <ChevronDown
-                className={`w-3.5 h-3.5 transition-transform ${showTemplates ? 'rotate-180' : ''}`}
+                className={`w-3.5 h-3.5 transition-transform ${showMenu ? 'rotate-180' : ''}`}
               />
-              {showTemplates ? '收起' : '换一个日模板'}
+              {showMenu ? '收起' : `改今天的组成（已选 ${chosenBlocks.length} 项）`}
             </button>
 
-            {showTemplates && (
-              <div className="space-y-1.5">
-                {data.templates.map((t) => {
-                  const isSel = overrideTemplate
-                    ? t.id === overrideTemplate
-                    : t.id === data.suggestion?.id;
-                  return (
+            {showMenu && (
+              <div className="space-y-3 rounded-lg border border-stone-200 bg-stone-50/60 p-3">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[11px] text-stone-400 mr-0.5">快捷组合</span>
+                  {menu.presets.map((pr) => (
                     <button
-                      key={t.id}
-                      onClick={() => {
-                        setOverrideTemplate(t.id);
-                        setShowTemplates(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 rounded-lg border transition-colors ${
-                        isSel
-                          ? 'border-indigo-400 bg-indigo-50 ring-1 ring-indigo-300'
-                          : 'border-stone-200 bg-white hover:bg-stone-50'
-                      }`}
+                      key={pr.id}
+                      type="button"
+                      title={pr.note}
+                      onClick={() => setChosenBlocks(withRequired(menu, pr.blocks))}
+                      className="text-[11px] px-2 py-1 rounded border border-stone-300 bg-white hover:border-indigo-400 hover:text-indigo-700"
                     >
-                      <span className="block text-sm text-stone-800 truncate">
-                        {t.title}
-                      </span>
-                      {t.tasks && (
-                        <span className="block text-xs text-stone-500 truncate">
-                          {t.tasks.map((x) => x.name).join(' · ')}
-                        </span>
-                      )}
+                      {pr.label}
                     </button>
-                  );
-                })}
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setChosenBlocks(withRequired(menu, []))}
+                    className="text-[11px] px-2 py-1 rounded border border-stone-300 bg-white hover:border-stone-500 text-stone-500"
+                  >
+                    清空
+                  </button>
+                </div>
+
+                {groupByTrack(menu.blocks).map(([track, blocks]) => (
+                  <div key={track}>
+                    <div className="text-[10px] uppercase tracking-wider text-stone-400 font-medium mb-1">
+                      {menu.trackTypes[track]?.emoji ?? '·'}{' '}
+                      {menu.trackTypes[track]?.label ?? track}
+                    </div>
+                    <div className="grid lg:grid-cols-2 gap-1.5">
+                      {blocks.map((b) => (
+                        <BlockOption
+                          key={b.id}
+                          block={b}
+                          checked={chosenBlocks.includes(b.id)}
+                          onToggle={() =>
+                            setChosenBlocks((cur) =>
+                              cur.includes(b.id)
+                                ? cur.filter((x) => x !== b.id)
+                                : [...cur, b.id],
+                            )
+                          }
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </>
@@ -232,7 +283,7 @@ export function TodayPicker() {
         <div className="flex items-center gap-3 pt-1">
           <button
             onClick={create}
-            disabled={!chosen || creating}
+            disabled={chosenBlocks.length === 0 || creating}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
           >
             {creating ? (
@@ -437,5 +488,102 @@ function SlotRow({
         </div>
       )}
     </div>
+  );
+}
+
+/** Required blocks are never really optional — always fold them back in. */
+function withRequired(menu: BlocksResponse, ids: string[]): string[] {
+  const required = menu.blocks.filter((b) => b.required).map((b) => b.id);
+  return [...new Set([...required, ...ids])];
+}
+
+function missingRequired(menu: BlocksResponse, ids: string[]): BlockLite[] {
+  return menu.blocks.filter((b) => b.required && !ids.includes(b.id));
+}
+
+function presetLabel(menu: BlocksResponse | null, ids: string[]): string {
+  const hit = menu?.presets.find(
+    (p) =>
+      p.blocks.length === ids.length && p.blocks.every((b) => ids.includes(b)),
+  );
+  return hit ? `自选 · ${hit.label}` : '自选';
+}
+
+function groupByTrack(blocks: BlockLite[]): [string, BlockLite[]][] {
+  const out: [string, BlockLite[]][] = [];
+  for (const b of blocks) {
+    const last = out[out.length - 1];
+    if (last && last[0] === b.track) last[1].push(b);
+    else out.push([b.track, [b]]);
+  }
+  return out;
+}
+
+/** "20 天前" / "还没做过" — the number that should drive tonight's pick. */
+function staleLabel(b: BlockLite): { text: string; tone: string } {
+  if (b.daysSince === undefined) {
+    return { text: '还没做过', tone: 'text-stone-400' };
+  }
+  if (b.daysSince === 0) return { text: '今天做过', tone: 'text-emerald-600' };
+  const text = `${b.daysSince} 天没做`;
+  if (b.daysSince >= 14) return { text, tone: 'text-rose-600 font-medium' };
+  if (b.daysSince >= 7) return { text, tone: 'text-amber-600' };
+  return { text, tone: 'text-stone-400' };
+}
+
+function BlockOption({
+  block,
+  checked,
+  onToggle,
+}: {
+  block: BlockLite;
+  checked: boolean;
+  onToggle: () => void;
+}) {
+  const stale = staleLabel(block);
+  return (
+    <label
+      className={`flex items-start gap-2 px-2.5 py-2 rounded-lg border cursor-pointer transition-colors ${
+        checked
+          ? 'border-indigo-400 bg-indigo-50'
+          : 'border-stone-200 bg-white hover:border-stone-400'
+      }`}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onToggle}
+        className="mt-0.5 accent-indigo-600"
+      />
+      <span className="min-w-0 flex-1">
+        <span className="flex items-baseline gap-1.5">
+          <span className="text-[13px] font-medium text-stone-800">{block.name}</span>
+          {block.required && (
+            <span className="text-[9px] px-1 rounded bg-amber-100 text-amber-700 shrink-0">
+              必选
+            </span>
+          )}
+        </span>
+        <span className="flex items-center gap-1.5 text-[10px] mt-0.5 flex-wrap">
+          <span className="text-stone-400 font-mono shrink-0">
+            {block.units}×{block.target ?? ''} · {block.minutes}min
+          </span>
+          <span className={`${stale.tone} inline-flex items-center gap-0.5 shrink-0`}>
+            <Clock className="w-2.5 h-2.5" />
+            {stale.text}
+          </span>
+        </span>
+        {block.desc && (
+          <span className="block text-[11px] text-stone-500 leading-snug mt-1">
+            {block.desc}
+          </span>
+        )}
+        {block.covers && block.covers.length > 0 && (
+          <span className="block text-[10px] text-stone-400 mt-1 leading-snug">
+            对应总览：{block.covers.join(' · ')}
+          </span>
+        )}
+      </span>
+    </label>
   );
 }

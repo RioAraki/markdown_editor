@@ -10,6 +10,7 @@ import {
   loadPlan,
   resolveDayPlan,
 } from '@/lib/interviewPlan';
+import { dayFromBlocks } from '@shared/interview/core';
 import { flattenInventory, loadInventory, loadMastery } from '@/lib/interviewInventory';
 import path from 'path';
 import fs from 'fs/promises';
@@ -206,9 +207,14 @@ export async function POST(req: Request, context: RouteContext) {
     const body: CreateDayRequest = await req.json().catch(() => ({}));
     const plan = await loadPlan();
 
-    const day = body.templateId
-      ? (plan.templates ?? []).find((t) => t.id === body.templateId)
-      : resolveDayPlan(plan, date);
+    // Assembling from blocks is the primary path now; a template id is only
+    // honoured when nothing was picked, and the phase×weekday prescription is
+    // the last resort so an un-composed day still produces something.
+    const day = body.blocks?.length
+      ? dayFromBlocks(plan.blocks ?? [], body.blocks, body.title || '自选')
+      : body.templateId
+        ? (plan.templates ?? []).find((t) => t.id === body.templateId)
+        : resolveDayPlan(plan, date);
 
     if (!day) {
       return NextResponse.json(

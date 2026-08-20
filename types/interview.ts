@@ -168,6 +168,35 @@ export interface SuggestedQuestion {
   reason: string;
 }
 
+/** One block in the assembly menu, with how stale it is. */
+export interface BlockLite {
+  id: string;
+  name: string;
+  track: string;
+  units: number;
+  target?: string;
+  minutes?: number;
+  note?: string;
+  pool?: string[];
+  url?: string;
+  required?: boolean;
+  /** One line saying what this block actually is. */
+  desc?: string;
+  /** Labels of the 总览 modules this block feeds — the cross-reference. */
+  covers?: string[];
+  /** Last day something under this block was actually ticked. */
+  lastDate?: string;
+  daysSince?: number;
+  times: number;
+}
+
+export interface BlocksResponse {
+  today: string;
+  trackTypes: Record<string, { emoji: string; label: string }>;
+  presets: { id: string; label: string; note?: string; blocks: string[] }[];
+  blocks: BlockLite[];
+}
+
 export interface TodayPlanResponse {
   today: string;
   /** Task name → the problems recommended for its checkboxes, in order. */
@@ -190,6 +219,10 @@ export interface TodayPlanResponse {
 /** What the client sends when creating a day with its chosen items. */
 export interface CreateDayRequest {
   templateId?: string;
+  /** Block ids to assemble the day from — beats templateId when present. */
+  blocks?: string[];
+  /** Title for an assembled day, e.g. "自选 · 复习". */
+  title?: string;
   /** Task name → inventory item id. */
   items?: Record<string, string>;
   /** Task name → ordered LeetCode problem ids, one per checkbox. */
