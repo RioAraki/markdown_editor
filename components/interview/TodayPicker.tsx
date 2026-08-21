@@ -17,6 +17,7 @@ import {
   ItemChoiceLite,
   PlanDayLite,
   PlanTaskLite,
+  SuggestedItem,
   SuggestedProblem,
   SuggestedQuestion,
   TodayPlanResponse,
@@ -319,7 +320,7 @@ function SlotRow({
   trackLabel: string;
   pickedId?: string;
   choice?: ItemChoiceLite;
-  suggested?: { id: string; title: string; how?: string; touches: number };
+  suggested?: SuggestedItem;
   isSwapping: boolean;
   onToggleSwap: () => void;
   onPick: (id: string) => void;
@@ -364,11 +365,21 @@ function SlotRow({
             ) : questions.length > 0 ? (
               <p className="text-xs text-stone-700 mt-0.5">
                 → {title}
+                {suggested?.resumedFrom && (
+                  <span className="ml-1.5 text-[10px] px-1 rounded bg-amber-100 text-amber-700">
+                    接着 {suggested.resumedFrom.slice(5)} 没做完的
+                  </span>
+                )}
               </p>
             ) : title ? (
               <p className="text-xs text-stone-700 mt-0.5">
                 → {title}
-                {touches > 0 && (
+                {suggested?.resumedFrom && (
+                  <span className="ml-1.5 text-[10px] px-1 rounded bg-amber-100 text-amber-700">
+                    接着 {suggested.resumedFrom.slice(5)} 没做完的
+                  </span>
+                )}
+                {touches > 0 && !suggested?.resumedFrom && (
                   <span className="ml-1.5 text-[10px] text-amber-600">
                     做过 {touches} 次
                   </span>

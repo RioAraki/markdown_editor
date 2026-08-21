@@ -9,9 +9,15 @@ import {
   loadMastery,
   suggestForTrack,
 } from '@/lib/interviewInventory';
-import { loadLeetCode, loadQBank } from '@shared/interview/load';
+import {
+  loadInterviewPlan,
+  loadLeetCode,
+  loadQBank,
+} from '@shared/interview/load';
+import { parseProblemUnit } from '@shared/interview/leetcode';
+import { parseQuestionUnit } from '@shared/interview/qbank';
 import { recommendQuestions } from '@shared/interview/qbank';
-import { dayFromBlocks } from '@shared/interview/core';
+import { carryOver, dayFromBlocks } from '@shared/interview/core';
 import { recommendProblems } from '@shared/interview/leetcode';
 import { TodayPlanResponse } from '@/types/interview';
 
@@ -21,13 +27,15 @@ const DATA_DIR = path.dirname(
 
 export async function GET(req: Request) {
   try {
-    const [plan, inventory, mastery, touches, leetcode, qbank] = await Promise.all([
+    const [plan, inventory, mastery, touches, leetcode, qbank, fullPlan] =
+      await Promise.all([
       loadPlan(),
       loadInventory(),
       loadMastery(),
       computeTouchCounts(),
       loadLeetCode(DATA_DIR),
       loadQBank(DATA_DIR),
+      loadInterviewPlan(DATA_DIR),
     ]);
 
     // itemId → the bank's own category name, so a 题库 slot bound to `qb-rag`
@@ -52,20 +60,24 @@ export async function GET(req: Request) {
 
     const choices = flattenInventory(inventory, touches, mastery);
 
+    // Anything left unticked comes back before anything new is chosen.
+    const pending = new Map(
+      carryOver(fullPlan, today).map((c) => [c.taskName, c]),
+    );
+
     // Auto-pick one inventory item per task slot, no repeats within the day.
     const used = new Set<string>();
     const suggestedItems: TodayPlanResponse['suggestedItems'] = {};
     for (const task of suggestion?.tasks ?? []) {
-      const pick = suggestForTrack(
-        choices,
-        inventory,
-        task.track,
-        used,
-        task.pool,
-      );
+      // Resume the exact item you left unfinished rather than moving on.
+      const resumeId = pending.get(task.name)?.itemId;
+      const pick =
+        (resumeId && choices.find((c) => c.id === resumeId)) ||
+        suggestForTrack(choices, inventory, task.track, used, task.pool);
       if (pick) {
         used.add(pick.id);
         suggestedItems[task.name] = {
+          resumedFrom: resumeId === pick.id ? pending.get(task.name)?.date : undefined,
           id: pick.id,
           title: pick.title,
           domainLabel: pick.domainLabel,
@@ -86,13 +98,38 @@ export async function GET(req: Request) {
       const recs = recommendProblems({
         bank: leetcode.bank,
         log: leetcode.log,
-        itemId: suggestedItems[task.name]?.id ?? null,
+        // Deliberately not restricted to the slot's bound topic. Binding one
+        // topic per day meant every problem drilled the same insight; the
+        // recommender spreads across topics instead.
+        itemId: null,
         count: Math.max(1, task.units),
         today,
         exclude: usedProblems,
       });
       for (const r of recs) usedProblems.add(r.problem.id);
-      suggestedProblems[task.name] = recs.map((r) => ({
+
+      // Unfinished problems from the last session go back on the card first,
+      // and take slots away from new ones rather than adding to the load.
+      const resume = (pending.get(task.name)?.units ?? [])
+        .map((u) => parseProblemUnit(u)?.id)
+        .filter((id): id is number => typeof id === 'number')
+        .map((id) => leetcode.bank.problems.find((p) => p.id === id))
+        .filter((p): p is NonNullable<typeof p> => !!p);
+
+      const carried = resume.map((p) => ({
+        id: p.id,
+        title: p.title,
+        url: p.url,
+        difficulty: p.difficulty,
+        kind: 'new' as const,
+        flagged: undefined,
+        reason: `接着做 · ${pending.get(task.name)?.date} 排了没做`,
+      }));
+      const keep = recs
+        .filter((r) => !resume.some((p) => p.id === r.problem.id))
+        .slice(0, Math.max(0, Math.max(1, task.units) - carried.length));
+
+      suggestedProblems[task.name] = [...carried, ...keep.map((r) => ({
         id: r.problem.id,
         title: r.problem.title,
         url: r.problem.url,
@@ -100,7 +137,8 @@ export async function GET(req: Request) {
         kind: r.kind,
         flagged: r.flagged,
         reason: r.reason,
-      }));
+      }))];
+      for (const c of carried) usedProblems.add(c.id);
     }
 
     // Same idea one level down for 题库 slots: name the actual questions.
@@ -118,14 +156,37 @@ export async function GET(req: Request) {
         exclude: usedQuestions,
       });
       for (const r of recs) usedQuestions.add(r.question.id);
-      suggestedQuestions[task.name] = recs.map((r) => ({
-        id: r.question.id,
-        question: r.question.question,
-        category: r.question.category,
-        url: r.question.url,
-        kind: r.kind,
-        reason: r.reason,
+
+      const resumeQ = (pending.get(task.name)?.units ?? [])
+        .map((u) => parseQuestionUnit(u)?.id)
+        .filter((id): id is string => !!id)
+        .map((id) => qbank.bank.questions.find((q) => q.id === id))
+        .filter((q): q is NonNullable<typeof q> => !!q);
+
+      const carriedQ = resumeQ.map((q) => ({
+        id: q.id,
+        question: q.question,
+        category: q.category,
+        url: q.url,
+        kind: 'new' as const,
+        reason: `接着答 · ${pending.get(task.name)?.date} 排了没答`,
       }));
+      const keepQ = recs
+        .filter((r) => !resumeQ.some((q) => q.id === r.question.id))
+        .slice(0, Math.max(0, Math.max(1, task.units) - carriedQ.length));
+
+      suggestedQuestions[task.name] = [
+        ...carriedQ,
+        ...keepQ.map((r) => ({
+          id: r.question.id,
+          question: r.question.question,
+          category: r.question.category,
+          url: r.question.url,
+          kind: r.kind,
+          reason: r.reason,
+        })),
+      ];
+      for (const c of carriedQ) usedQuestions.add(c.id);
     }
 
     const response: TodayPlanResponse = {

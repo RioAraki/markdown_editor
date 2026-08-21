@@ -43,7 +43,15 @@ export async function POST(req: Request) {
       count,
       today,
       exclude,
-      avoidTopics: new Set(body.topics ?? []),
+      // Derive the topics to avoid from the problems already on the card. The
+      // client only knows topic *titles*, and the recommender keys on item
+      // ids — passing the former silently matched nothing.
+      avoidTopics: new Set(
+        bank.problems
+          .filter((p) => exclude.has(p.id))
+          .map((p) => p.item)
+          .filter((x): x is string => !!x),
+      ),
       reviewQuota: flaggedWaiting ? 1 : 0,
     });
 

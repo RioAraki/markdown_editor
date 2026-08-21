@@ -117,6 +117,8 @@ export interface PlanDayLite {
 
 /** An inventory item auto-picked for one of today's task slots. */
 export interface SuggestedItem {
+  /** Set when this item is being resumed because that day left it unfinished. */
+  resumedFrom?: string;
   id: string;
   title: string;
   domainLabel: string;
