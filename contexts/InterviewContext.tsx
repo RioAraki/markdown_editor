@@ -116,6 +116,22 @@ export function InterviewProvider({ children }: { children: React.ReactNode }) {
     fetchDays();
   }, [fetchDays]);
 
+  // Re-read from disk when the tab regains focus, provided nothing is unsaved.
+  // A tab sitting idle while the files are edited elsewhere is exactly how a
+  // stale copy gets written back over good data.
+  useEffect(() => {
+    const onFocus = () => {
+      const cur = daysRef.current;
+      const sv = savedRef.current;
+      const clean = cur.every(
+        (d) => serializeInterviewDayDoc(d) === sv[d.dateStr],
+      );
+      if (clean) void fetchDays();
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [fetchDays]);
+
   const updateDay = useCallback(
     (dateStr: string, mutator: (doc: InterviewDayDoc) => InterviewDayDoc) => {
       setDays((prev) =>
@@ -179,8 +195,28 @@ export function InterviewProvider({ children }: { children: React.ReactNode }) {
           const res = await fetch(`/api/interview/${doc.dateStr}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ content: serialized }),
+            body: JSON.stringify({
+              content: serialized,
+              baseContent: currentSaved[doc.dateStr],
+            }),
           });
+          if (res.status === 409) {
+            // Someone (or something) changed this day on disk. Their version
+            // wins — ours was built on content that no longer exists.
+            const { content } = (await res.json()) as { content: string };
+            const fresh = ensureNotesBlock(
+              parseInterviewDayDoc(content, doc.filename),
+            );
+            setDays((prev) =>
+              prev.map((d) => (d.dateStr === doc.dateStr ? fresh : d)),
+            );
+            setSaved((prev) => ({
+              ...prev,
+              [doc.dateStr]: serializeInterviewDayDoc(fresh),
+            }));
+            setError(`${doc.dateStr} 在别处被改过，已重新载入磁盘上的版本`);
+            return;
+          }
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
         }),
       );

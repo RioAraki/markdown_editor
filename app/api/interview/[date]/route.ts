@@ -165,6 +165,21 @@ export async function PUT(req: Request, context: RouteContext) {
         { status: 400 },
       );
     }
+
+    // The editor holds a whole-file copy and writes it back wholesale, so a tab
+    // left open overnight will happily clobber anything edited on disk since.
+    // `baseContent` is what the client last read; if the file has moved on,
+    // refuse and hand back the current version rather than losing it.
+    if (typeof body.baseContent === 'string') {
+      const onDisk = await readInterviewDay(date).catch(() => null);
+      if (onDisk !== null && onDisk !== body.baseContent) {
+        return NextResponse.json(
+          { error: 'stale', content: onDisk },
+          { status: 409 },
+        );
+      }
+    }
+
     await writeInterviewDay(date, body.content);
     await reconcileLeetCodeLog(date, body.content).catch((e) =>
       console.error('Failed to reconcile leetcode log:', e),

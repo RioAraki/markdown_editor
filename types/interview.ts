@@ -19,6 +19,8 @@ export interface InterviewDayContentResponse {
 
 export interface SaveInterviewRequest {
   content: string;
+  /** What the client last read from disk — used to detect a stale write. */
+  baseContent?: string;
 }
 
 /** pending → done → partial (做了但没达标) → pending */
