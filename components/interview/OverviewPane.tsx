@@ -27,6 +27,7 @@ import { getTodayDate } from '@/lib/dateUtils';
 
 interface Bundle {
   plan: InterviewPlan;
+  notes?: Record<string, { body: string; updated?: string }>;
   qbank: { bank: QuestionBank; log: QBankLog };
   leetcode: { bank: ProblemBank; log: LeetCodeLog };
 }
@@ -67,9 +68,11 @@ export function OverviewPane() {
     const onUpdated = () => void load();
     window.addEventListener('interview:leetcode-updated', onUpdated);
     window.addEventListener('interview:qbank-updated', onUpdated);
+    window.addEventListener('interview:topic-updated', onUpdated);
     return () => {
       window.removeEventListener('interview:leetcode-updated', onUpdated);
       window.removeEventListener('interview:qbank-updated', onUpdated);
+      window.removeEventListener('interview:topic-updated', onUpdated);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -235,6 +238,7 @@ export function OverviewPane() {
         coverage={model.coverage}
         overall={model.overall}
         weekTracks={model.weekTracks}
+        notes={bundle?.notes}
       />
     </div>
   );

@@ -80,6 +80,7 @@ export function InterviewEditor() {
   // problemId → 中文专题名. Only used to reveal what an already-attempted
   // problem was testing; never shown before an outcome is recorded.
   const [problemTopic, setProblemTopic] = useState<Record<number, string>>({});
+  const [problemItem, setProblemItem] = useState<Record<number, string>>({});
   const [links, setLinks] = useState<{
     tasks: Record<string, string>;
     problems: Record<number, string>;
@@ -129,10 +130,14 @@ export function InterviewEditor() {
       .then((d: { bank: { problems: { id: number; item: string | null }[] }; topics: Record<string, string> }) => {
         if (cancelled) return;
         const m: Record<number, string> = {};
+        const items: Record<number, string> = {};
         for (const p of d.bank.problems) {
-          if (p.item && d.topics[p.item]) m[p.id] = d.topics[p.item];
+          if (!p.item) continue;
+          items[p.id] = p.item;
+          if (d.topics[p.item]) m[p.id] = d.topics[p.item];
         }
         setProblemTopic(m);
+        setProblemItem(items);
       })
       .catch(() => {});
     return () => {
@@ -268,6 +273,7 @@ export function InterviewEditor() {
                 day={shownDay}
                 isToday={shownDay.dateStr === today}
                 problemTopic={problemTopic}
+                problemItem={problemItem}
                 qmeta={qmeta}
                 qanswers={qanswers}
                 links={links}
@@ -289,6 +295,7 @@ function DayCard({
   day,
   isToday,
   problemTopic,
+  problemItem,
   qmeta,
   qanswers,
   links,
@@ -300,6 +307,7 @@ function DayCard({
   day: InterviewDayDoc;
   isToday: boolean;
   problemTopic: Record<number, string>;
+  problemItem: Record<number, string>;
   qmeta: Record<string, QuestionMeta>;
   qanswers: Record<string, string>;
   links: { tasks: Record<string, string>; problems: Record<number, string> };
@@ -363,6 +371,7 @@ function DayCard({
               dateStr={day.dateStr}
               blockIdx={blockIdx}
               problemTopic={problemTopic}
+              problemItem={problemItem}
               qmeta={qmeta}
               qanswers={qanswers}
               links={links}
@@ -435,6 +444,7 @@ function BlockRow({
   dateStr,
   blockIdx,
   problemTopic,
+  problemItem,
   qmeta,
   qanswers,
   links,
@@ -449,6 +459,7 @@ function BlockRow({
   dateStr: string;
   blockIdx: number;
   problemTopic: Record<number, string>;
+  problemItem: Record<number, string>;
   qmeta: Record<string, QuestionMeta>;
   qanswers: Record<string, string>;
   links: { tasks: Record<string, string>; problems: Record<number, string> };
@@ -483,6 +494,7 @@ function BlockRow({
           trailing={block.trailing}
           dateStr={dateStr}
           problemTopic={problemTopic}
+          problemItem={problemItem}
           onChange={(s, t) => onToggleTaskStatus(dateStr, blockIdx, s, t)}
         />
         {notesBlockIdx >= 0 && (
@@ -557,6 +569,7 @@ function BlockRow({
                 key={unitIdx}
                 {...common}
                 problemTopic={problemTopic}
+                problemItem={problemItem}
                 problemUrl={links.problems}
               />
             );

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ExternalLink, Loader2, RotateCcw } from 'lucide-react';
+import { ExternalLink, Lightbulb, Loader2, RotateCcw } from 'lucide-react';
 import {
   OUTCOME_HINT,
   OUTCOME_LABEL,
@@ -113,6 +113,7 @@ export function UnitRecord({
   dateStr,
   problemTopic,
   problemUrl,
+  problemItem,
   onChange,
 }: {
   index: number;
@@ -127,6 +128,9 @@ export function UnitRecord({
   problemTopic?: Record<number, string>;
   /** problemId → 真实题目页地址（题库带的），比搜索页直达。 */
   problemUrl?: Record<number, string>;
+  /** problemId -> which inventory topic it belongs to, so a lesson lands
+   *  in the right file. */
+  problemItem?: Record<number, string>;
   onChange: (status: UnitStatus, trailing: string) => void;
 }) {
   const parts = decompose(trailing);
@@ -137,6 +141,39 @@ export function UnitRecord({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(false);
   const noteRef = useRef<HTMLTextAreaElement>(null);
+
+  // A lesson is what you learned about the *topic*, as opposed to how this one
+  // attempt went. It is offered the moment the topic is revealed, because that
+  // is when the generalisation is actually available to you.
+  const [showLesson, setShowLesson] = useState(false);
+  const [lesson, setLesson] = useState("");
+  const [lessonSaved, setLessonSaved] = useState(false);
+
+  const saveLesson = async () => {
+    const pid = parts.problemId;
+    const itemId = pid !== undefined ? problemItem?.[pid] : undefined;
+    const text = lesson.trim();
+    if (!itemId || !text) return;
+    try {
+      const res = await fetch("/api/interview/topics", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: itemId,
+          append: text,
+          title: pid !== undefined ? problemTopic?.[pid] : undefined,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      setLesson("");
+      setShowLesson(false);
+      setLessonSaved(true);
+      setTimeout(() => setLessonSaved(false), 2500);
+      window.dispatchEvent(new CustomEvent("interview:topic-updated"));
+    } catch {
+      setError(true);
+    }
+  };
 
   // Opening is the point of the interaction — put the cursor in the box.
   useEffect(() => {
@@ -316,12 +353,55 @@ export function UnitRecord({
                 <div className="mt-1.5 space-y-1">
                   {parts.problemId !== undefined &&
                     problemTopic?.[parts.problemId] && (
-                      <p className="text-[11px]">
+                      <p className="text-[11px] flex items-center gap-1.5 flex-wrap">
                         <span className="inline-block px-1.5 py-0.5 rounded bg-violet-100 text-violet-700">
                           考察：{problemTopic[parts.problemId]}
                         </span>
+                        {problemItem?.[parts.problemId] && (
+                          <button
+                            type="button"
+                            onClick={() => setShowLesson((v) => !v)}
+                            title="把这次悟到的东西记进这个考点的要领，下次做同类题会先看到"
+                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-violet-300 text-violet-700 hover:bg-violet-50"
+                          >
+                            <Lightbulb className="w-3 h-3" />
+                            记要领
+                          </button>
+                        )}
+                        {lessonSaved && (
+                          <span className="text-emerald-600">已记进要领</span>
+                        )}
                       </p>
                     )}
+                  {showLesson && parts.problemId !== undefined && (
+                    <div className="mt-1">
+                      <textarea
+                        value={lesson}
+                        onChange={(e) => setLesson(e.target.value)}
+                        rows={2}
+                        autoFocus
+                        placeholder="这一类题的通用心得，不是这一题的细节。例：改 next 之前先把要读的存进变量 —— 读写冲突是链表题所有顺序敏感的来源。"
+                        className="w-full px-2 py-1.5 text-xs border border-violet-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-violet-200 resize-y leading-relaxed"
+                      />
+                      <div className="flex items-center gap-2 mt-1">
+                        <button
+                          type="button"
+                          onClick={saveLesson}
+                          disabled={!lesson.trim()}
+                          className="text-[11px] px-2 py-1 rounded bg-violet-600 text-white disabled:opacity-40"
+                        >
+                          记进「{problemTopic?.[parts.problemId]}」的要领
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowLesson(false)}
+                          className="text-[11px] text-stone-400 hover:text-stone-600"
+                        >
+                          取消
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   <p className="text-[10px] text-stone-400">
                     {parts.redo
                       ? '已标记待重做 · 一周内回到推荐里，并排在复习队列最前'
