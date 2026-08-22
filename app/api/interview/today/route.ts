@@ -181,17 +181,42 @@ export async function GET(req: Request) {
     // Same idea one level down for 题库 slots: name the actual questions.
     const usedQuestions = new Set<string>();
     const suggestedQuestions: TodayPlanResponse['suggestedQuestions'] = {};
+    // item id → bank category, and back again: the slot's category follows the
+    // questions, not the other way round.
+    const itemOfCategory: Record<string, string> = {};
+    for (const [id, cat] of Object.entries(categoryOf)) itemOfCategory[cat] = id;
+
     for (const task of suggestion?.tasks ?? []) {
       if (!(task.pool ?? []).includes('ai-qbank')) continue;
-      const itemId = suggestedItems[task.name]?.id;
+      // Deliberately not restricted to the slot's category. Unlike LeetCode
+      // topics, which are interchangeable, this bank is written 由浅入深 as one
+      // sequence — 基础概念 before 核心框架 before RAG. Binding a category first
+      // meant jumping to Prompt 工程 while 基础概念 still had five unanswered.
       const recs = recommendQuestions({
         bank: qbank.bank,
         log: qbank.log,
-        category: (itemId && categoryOf[itemId]) || null,
+        category: null,
         count: Math.max(1, task.units),
         today,
         exclude: usedQuestions,
       });
+
+      // Whatever the questions turned out to be decides what the slot is about.
+      const cat = recs[0]?.question.category;
+      const boundId = cat ? itemOfCategory[cat] : undefined;
+      const bound = boundId ? choices.find((c) => c.id === boundId) : undefined;
+      if (bound) {
+        suggestedItems[task.name] = {
+          id: bound.id,
+          title: bound.title,
+          domainLabel: bound.domainLabel,
+          moduleLabel: bound.moduleLabel,
+          touches: bound.touches,
+          how: bound.how,
+          test: bound.test,
+        };
+        used.add(bound.id);
+      }
       for (const r of recs) usedQuestions.add(r.question.id);
 
       const resumeQ = (pending.get(task.name)?.units ?? [])
