@@ -18,9 +18,17 @@ import {
   setTaskStatus,
   setUnitStatus,
 } from '@/lib/interviewParser';
+import { getTodayDate } from '@/lib/dateUtils';
 
 interface InterviewContextType {
   days: InterviewDayDoc[];
+  /**
+   * Which day the editor shows. One day at a time, on purpose: the page is for
+   * doing today's work, and a scroll through every past day only gets longer.
+   * Reviewing older days is the calendar's job.
+   */
+  selectedDate: string;
+  setSelectedDate: (dateStr: string) => void;
   isLoading: boolean;
   isSaving: boolean;
   lastSaved: Date | null;
@@ -59,6 +67,7 @@ const AUTOSAVE_DELAY_MS = 1500;
 
 export function InterviewProvider({ children }: { children: React.ReactNode }) {
   const [days, setDays] = useState<InterviewDayDoc[]>([]);
+  const [selectedDate, setSelectedDate] = useState<string>(() => getTodayDate());
   const [saved, setSaved] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -211,6 +220,8 @@ export function InterviewProvider({ children }: { children: React.ReactNode }) {
 
   const value: InterviewContextType = {
     days,
+    selectedDate,
+    setSelectedDate,
     isLoading,
     isSaving,
     lastSaved,

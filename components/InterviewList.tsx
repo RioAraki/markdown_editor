@@ -32,7 +32,7 @@ function mondayIndex(date: Date): number {
 }
 
 export function InterviewList() {
-  const { days, isLoading } = useInterview();
+  const { days, isLoading, selectedDate, setSelectedDate } = useInterview();
   const today = getTodayDate();
   const [month, setMonth] = useState(() => monthOf(today));
 
@@ -42,18 +42,16 @@ export function InterviewList() {
     return m;
   }, [days]);
 
-  // Jump to the month holding the newest record when the set first arrives.
+  // Follow the selection when it lands outside the month on screen. Keyed on
+  // selectedDate alone so browsing months with the arrows doesn't snap back.
   useEffect(() => {
-    if (days.length === 0) return;
-    const newest = days.reduce((a, b) => (a.dateStr > b.dateStr ? a : b)).dateStr;
-    setMonth((prev) => {
-      const t = monthOf(newest > today ? today : newest);
-      return prev.getFullYear() === t.getFullYear() && prev.getMonth() === t.getMonth()
+    const t = monthOf(selectedDate);
+    setMonth((prev) =>
+      prev.getFullYear() === t.getFullYear() && prev.getMonth() === t.getMonth()
         ? prev
-        : t;
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [days.length]);
+        : t,
+    );
+  }, [selectedDate]);
 
   if (isLoading) {
     return (
@@ -64,10 +62,8 @@ export function InterviewList() {
     );
   }
 
-  const jump = (dateStr: string) => {
-    const el = document.querySelector<HTMLElement>(`[data-day-card="${dateStr}"]`);
-    if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
-  };
+  // The editor shows one day at a time, so a click here IS the navigation.
+  const jump = (dateStr: string) => setSelectedDate(dateStr);
 
   const year = month.getFullYear();
   const mon = month.getMonth();
@@ -91,10 +87,11 @@ export function InterviewList() {
     <div className="flex flex-col h-full">
       <div className="p-3 border-b border-stone-200 bg-indigo-50/50">
         <button
-          onClick={() => jump(today)}
-          className="w-full text-sm font-medium px-3 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+          onClick={() => setSelectedDate(today)}
+          disabled={selectedDate === today}
+          className="w-full text-sm font-medium px-3 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:hover:bg-indigo-600 transition-colors"
         >
-          跳到今天
+          {selectedDate === today ? '正在看今天' : '回到今天'}
         </button>
       </div>
 
@@ -137,6 +134,7 @@ export function InterviewList() {
             const key = keyOf(year, mon, day);
             const p = byDate.get(key);
             const isToday = key === today;
+            const isSelected = key === selectedDate;
             const isFuture = key > today;
 
             let tone = 'text-stone-300';
@@ -164,7 +162,13 @@ export function InterviewList() {
                 }
                 className={`aspect-square flex items-center justify-center text-xs rounded-md transition-all ${tone} ${
                   p ? 'cursor-pointer hover:ring-2 hover:ring-indigo-300' : 'cursor-default'
-                } ${isToday ? 'ring-2 ring-indigo-600' : ''}`}
+                } ${
+                  isSelected
+                    ? 'ring-2 ring-indigo-600 ring-offset-1'
+                    : isToday
+                      ? 'ring-1 ring-indigo-400'
+                      : ''
+                }`}
               >
                 {day}
               </button>

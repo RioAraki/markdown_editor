@@ -58,6 +58,8 @@ interface Handlers {
 export function InterviewEditor() {
   const {
     days,
+    selectedDate,
+    setSelectedDate,
     isLoading,
     isSaving,
     lastSaved,
@@ -73,6 +75,7 @@ export function InterviewEditor() {
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const today = getTodayDate();
+  const shownDay = days.find((d) => d.dateStr === selectedDate);
 
   // problemId → 中文专题名. Only used to reveal what an already-attempted
   // problem was testing; never shown before an outcome is recorded.
@@ -153,22 +156,10 @@ export function InterviewEditor() {
     return () => window.removeEventListener('keydown', handler);
   }, [saveNow]);
 
-  const hasScrolledRef = useRef(false);
+  // Only one day is on screen, so switching days starts at its top.
   useEffect(() => {
-    if (hasScrolledRef.current) return;
-    if (isLoading || days.length === 0) return;
-    if (!scrollContainerRef.current) return;
-    const target = scrollContainerRef.current.querySelector<HTMLElement>(
-      `[data-day-card="${today}"]`,
-    );
-    if (target) {
-      target.scrollIntoView({ block: 'start', behavior: 'auto' });
-    } else {
-      // No record for today: land at the top where the TodayPicker sits.
-      scrollContainerRef.current.scrollTo({ top: 0, behavior: 'auto' });
-    }
-    hasScrolledRef.current = true;
-  }, [days, isLoading, today]);
+    scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'auto' });
+  }, [selectedDate]);
 
   return (
     <div className="h-full flex flex-col bg-white">
@@ -180,7 +171,8 @@ export function InterviewEditor() {
             Interview Prep
           </h2>
           <p className="text-xs text-stone-500 mt-0.5">
-            {days.length} 天 · 今天: {today}
+            {selectedDate === today ? `今天 ${today}` : `${selectedDate}（回看）`}
+            <span className="ml-2 text-stone-400">共 {days.length} 天记录</span>
           </p>
         </div>
 
@@ -256,12 +248,25 @@ export function InterviewEditor() {
                 Loading...
               </div>
             )}
-            {!isLoading && <TodayPicker />}
-            {days.map((day) => (
+            {!isLoading && selectedDate === today && <TodayPicker />}
+            {!isLoading && !shownDay && selectedDate !== today && (
+              <div className="bg-white rounded-lg border border-stone-200 p-6 text-center">
+                <p className="text-sm text-stone-500">
+                  {selectedDate} 没有记录
+                </p>
+                <button
+                  onClick={() => setSelectedDate(today)}
+                  className="mt-2 text-xs text-indigo-600 hover:underline"
+                >
+                  回到今天
+                </button>
+              </div>
+            )}
+            {shownDay && (
               <DayCard
-                key={day.dateStr}
-                day={day}
-                isToday={day.dateStr === today}
+                key={shownDay.dateStr}
+                day={shownDay}
+                isToday={shownDay.dateStr === today}
                 problemTopic={problemTopic}
                 qmeta={qmeta}
                 qanswers={qanswers}
@@ -271,7 +276,7 @@ export function InterviewEditor() {
                 onUpdateNoteEntry={updateNoteEntry}
                 onAppendUnit={appendUnit}
               />
-            ))}
+            )}
             <div className="h-[40vh]" />
           </div>
         </div>
