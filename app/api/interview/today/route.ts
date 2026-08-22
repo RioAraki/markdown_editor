@@ -13,6 +13,7 @@ import {
   loadInterviewPlan,
   loadLeetCode,
   loadQBank,
+  loadPapers,
 } from '@shared/interview/load';
 import { parseProblemUnit } from '@shared/interview/leetcode';
 import { parseQuestionUnit } from '@shared/interview/qbank';
@@ -27,7 +28,7 @@ const DATA_DIR = path.dirname(
 
 export async function GET(req: Request) {
   try {
-    const [plan, inventory, mastery, touches, leetcode, qbank, fullPlan] =
+    const [plan, inventory, mastery, touches, leetcode, qbank, fullPlan, papers] =
       await Promise.all([
       loadPlan(),
       loadInventory(),
@@ -36,6 +37,7 @@ export async function GET(req: Request) {
       loadLeetCode(DATA_DIR),
       loadQBank(DATA_DIR),
       loadInterviewPlan(DATA_DIR),
+      loadPapers(DATA_DIR),
     ]);
 
     // itemId → the bank's own category name, so a 题库 slot bound to `qb-rag`
@@ -70,7 +72,42 @@ export async function GET(req: Request) {
     const suggestedItems: TodayPlanResponse['suggestedItems'] = {};
     for (const task of suggestion?.tasks ?? []) {
       // Resume the exact item you left unfinished rather than moving on.
-      const resumeId = pending.get(task.name)?.itemId;
+      let resumeId = pending.get(task.name)?.itemId;
+
+      // Papers advance on being *finished*, not on a day's checkbox: a paper
+      // you read for an hour and ticked is still unread. So an unfinished one
+      // outranks both the carry-over and a fresh pick — otherwise ticking the
+      // slot each evening would quietly walk you down the reading list.
+      if ((task.pool ?? []).includes('ai-papers')) {
+        const started = Object.values(papers)
+          .filter((d) => !d.finished && (d.sessions.length > 0 || d.stages.length > 0))
+          .sort((a, b) => {
+            const la = a.sessions[a.sessions.length - 1]?.date ?? '';
+            const lb = b.sessions[b.sessions.length - 1]?.date ?? '';
+            return la.localeCompare(lb);
+          })[0];
+
+        if (started && choices.some((c) => c.id === started.id)) {
+          resumeId = started.id;
+        } else if (resumeId && papers[resumeId]?.finished) {
+          // Marked finished, so release the slot even though the day it was
+          // scheduled still has an unticked box.
+          resumeId = undefined;
+        }
+
+        // The reading list is chronological on purpose ("这一步解决了上一步什么
+        // 问题"), so a fresh pick starts at the front rather than at whichever
+        // one happens to be least-touched.
+        if (!resumeId) {
+          const next = (task.pool ?? []).includes('ai-papers')
+            ? choices.find(
+                (c) => c.moduleId === 'ai-papers' && !papers[c.id]?.finished,
+              )
+            : undefined;
+          if (next) resumeId = next.id;
+        }
+      }
+
       const pick =
         (resumeId && choices.find((c) => c.id === resumeId)) ||
         suggestForTrack(choices, inventory, task.track, used, task.pool);

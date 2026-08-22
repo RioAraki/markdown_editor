@@ -27,6 +27,8 @@ import { TaskNote } from './interview/TaskNote';
 import { AddProblem } from './interview/AddProblem';
 import { QuestionRecord, QuestionMeta } from './interview/QuestionRecord';
 import { AddQuestion } from './interview/AddQuestion';
+import { PaperPanel } from './interview/PaperPanel';
+import { PaperUnit } from './interview/PaperUnit';
 import { parseQuestionUnit } from '@shared/interview/qbank';
 import { usePullToRefresh } from './training/usePullToRefresh';
 
@@ -81,6 +83,15 @@ export function InterviewEditor() {
   // problem was testing; never shown before an outcome is recorded.
   const [problemTopic, setProblemTopic] = useState<Record<number, string>>({});
   const [problemItem, setProblemItem] = useState<Record<number, string>>({});
+  /** Which paper's workbench is open, if any. */
+  const [openPaper, setOpenPaper] = useState<string | null>(null);
+  const [paperIds, setPaperIds] = useState<string[]>([]);
+  useEffect(() => {
+    fetch('/api/interview/papers')
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d: { ids: string[] }) => setPaperIds(d.ids ?? []))
+      .catch(() => {});
+  }, []);
   const [links, setLinks] = useState<{
     tasks: Record<string, string>;
     problems: Record<number, string>;
@@ -211,6 +222,13 @@ export function InterviewEditor() {
 
       {/* Body */}
       <div className="relative flex-1 overflow-hidden bg-stone-50">
+        {openPaper && (
+          <PaperPanel
+            paperId={openPaper}
+            dateStr={selectedDate}
+            onClose={() => setOpenPaper(null)}
+          />
+        )}
         <div
           className="pointer-events-none absolute left-1/2 z-10 -translate-x-1/2"
           style={{
@@ -274,6 +292,8 @@ export function InterviewEditor() {
                 isToday={shownDay.dateStr === today}
                 problemTopic={problemTopic}
                 problemItem={problemItem}
+                paperIds={paperIds}
+                onOpenPaper={setOpenPaper}
                 qmeta={qmeta}
                 qanswers={qanswers}
                 links={links}
@@ -296,6 +316,8 @@ function DayCard({
   isToday,
   problemTopic,
   problemItem,
+  paperIds,
+  onOpenPaper,
   qmeta,
   qanswers,
   links,
@@ -308,6 +330,8 @@ function DayCard({
   isToday: boolean;
   problemTopic: Record<number, string>;
   problemItem: Record<number, string>;
+  paperIds: string[];
+  onOpenPaper: (id: string) => void;
   qmeta: Record<string, QuestionMeta>;
   qanswers: Record<string, string>;
   links: { tasks: Record<string, string>; problems: Record<number, string> };
@@ -372,6 +396,9 @@ function DayCard({
               blockIdx={blockIdx}
               problemTopic={problemTopic}
               problemItem={problemItem}
+              paperIds={paperIds}
+              onOpenPaper={onOpenPaper}
+              itemsByTask={day.itemsByTask}
               qmeta={qmeta}
               qanswers={qanswers}
               links={links}
@@ -445,6 +472,9 @@ function BlockRow({
   blockIdx,
   problemTopic,
   problemItem,
+  paperIds,
+  onOpenPaper,
+  itemsByTask,
   qmeta,
   qanswers,
   links,
@@ -460,6 +490,9 @@ function BlockRow({
   blockIdx: number;
   problemTopic: Record<number, string>;
   problemItem: Record<number, string>;
+  paperIds: string[];
+  onOpenPaper: (id: string) => void;
+  itemsByTask: Record<string, string>;
   qmeta: Record<string, QuestionMeta>;
   qanswers: Record<string, string>;
   links: { tasks: Record<string, string>; problems: Record<number, string> };
@@ -516,6 +549,11 @@ function BlockRow({
     const allDone = doneCount === total && total > 0;
     const isProblemBlock = block.units.some((u) => /#\d+/.test(u.trailing));
     const isQuestionBlock = block.units.some((u) => !!parseQuestionUnit(u.trailing));
+    // A paper slot is identified by what the day bound it to, not by the unit
+    // text — the checkbox itself is blank until the paper file says otherwise.
+    const boundItem = itemsByTask[name];
+    const paperId =
+      boundItem && paperIds.includes(boundItem) ? boundItem : undefined;
     return (
       <div className="py-3">
         <div className="flex items-baseline justify-between gap-3 mb-2">
@@ -546,7 +584,16 @@ function BlockRow({
           </span>
         </div>
         <div className="space-y-1.5">
-          {block.units.map((unit, unitIdx) => {
+          {paperId && (
+            <PaperUnit
+              paperId={paperId}
+              dateStr={dateStr}
+              status={block.units[0]?.status ?? 'pending'}
+              onChange={(st, t) => onToggleUnitStatus(dateStr, blockIdx, 0, st, t)}
+              onOpen={() => onOpenPaper(paperId)}
+            />
+          )}
+          {!paperId && block.units.map((unit, unitIdx) => {
             // `key` stays out of this object — React requires it directly on
             // the element, and spreading it there is an error.
             const common = {
