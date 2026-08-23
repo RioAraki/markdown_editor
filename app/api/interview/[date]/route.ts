@@ -16,6 +16,8 @@ import path from 'path';
 import fs from 'fs/promises';
 import { loadLeetCode, loadQBank } from '@shared/interview/load';
 import { parseQuestionUnit, questionUnitText } from '@shared/interview/qbank';
+import { loadStories } from '@shared/interview/load';
+import { questionUnitText as storyUnitText } from '@shared/interview/stories';
 import {
   parseQuestionDoc,
   serializeQuestionDoc,
@@ -280,6 +282,22 @@ export async function POST(req: Request, context: RouteContext) {
           .map((id) => byId.get(id))
           .filter((q): q is NonNullable<typeof q> => !!q)
           .map((q) => questionUnitText(q));
+      }
+    }
+
+    // 简历深挖 slots name their concrete challenges the same way.
+    if (body.challenges && Object.keys(body.challenges).length > 0) {
+      const { bank } = await loadStories(DATA_DIR);
+      const byId = new Map(
+        bank.stories.flatMap((st) =>
+          st.clusters.flatMap((c) => c.questions.map((q) => [q.id, { st, q }] as const)),
+        ),
+      );
+      for (const [task, ids] of Object.entries(body.challenges)) {
+        unitTexts[task] = ids
+          .map((id) => byId.get(id))
+          .filter((x): x is NonNullable<typeof x> => !!x)
+          .map(({ st, q }) => storyUnitText(st, q));
       }
     }
 

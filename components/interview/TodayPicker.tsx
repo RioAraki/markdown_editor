@@ -20,6 +20,7 @@ import {
   SuggestedItem,
   SuggestedProblem,
   SuggestedQuestion,
+  SuggestedStoryQuestion,
   TodayPlanResponse,
 } from '@/types/interview';
 
@@ -118,6 +119,12 @@ export function TodayPicker() {
               ps.map((p) => p.id),
             ]),
           ),
+          challenges: Object.fromEntries(
+            Object.entries(data.suggestedStories ?? {}).map(([task, cs]) => [
+              task,
+              cs.map((c) => c.id),
+            ]),
+          ),
           questions: Object.fromEntries(
             Object.entries(data.suggestedQuestions ?? {}).map(([task, qs]) => [
               task,
@@ -196,6 +203,7 @@ export function TodayPicker() {
                   }}
                   problems={data.suggestedProblems?.[task.name] ?? []}
                   questions={data.suggestedQuestions?.[task.name] ?? []}
+                  challenges={data.suggestedStories?.[task.name] ?? []}
                   candidates={(data.choices ?? []).filter(
                     (c) =>
                       (domainByTrack.get(task.track) ?? []).includes(
@@ -314,6 +322,7 @@ function SlotRow({
   candidates,
   problems,
   questions,
+  challenges,
 }: {
   task: PlanTaskLite;
   emoji: string;
@@ -329,6 +338,8 @@ function SlotRow({
   problems: SuggestedProblem[];
   /** For 题库 slots: the concrete questions picked for each checkbox. */
   questions: SuggestedQuestion[];
+  /** For 简历深挖 slots: tonight's challenges. */
+  challenges: SuggestedStoryQuestion[];
 }) {
   const [q, setQ] = useState('');
   const title =
@@ -391,7 +402,7 @@ function SlotRow({
               </p>
             )}
           </div>
-          {problems.length === 0 && questions.length === 0 && (
+          {problems.length === 0 && questions.length === 0 && challenges.length === 0 && (
             <button
               type="button"
               onClick={onToggleSwap}
@@ -403,6 +414,26 @@ function SlotRow({
             </button>
           )}
         </div>
+
+        {challenges.length > 0 && (
+          <ul className="mt-2 ml-6 space-y-1.5">
+            {challenges.map((c) => (
+              <li key={c.id} className="text-[11px] leading-relaxed">
+                <span
+                  className={`inline-block px-1 rounded mr-1 ${
+                    c.lens === '后果'
+                      ? 'bg-rose-100 text-rose-800 font-medium'
+                      : 'bg-stone-200 text-stone-600'
+                  }`}
+                >
+                  {c.lens}
+                </span>
+                <span className="text-stone-700">{c.q}</span>
+                <span className="block text-stone-400 ml-6">{c.reason}</span>
+              </li>
+            ))}
+          </ul>
+        )}
 
         {questions.length > 0 && (
           <ul className="mt-2 ml-6 space-y-1">

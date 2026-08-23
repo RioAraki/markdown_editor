@@ -18,6 +18,8 @@ import {
 } from '@shared/interview/core';
 import { reviewDebt, topicMetrics } from '@shared/interview/leetcode';
 import { categoryMetrics, qbankDebt } from '@shared/interview/qbank';
+import { clusterProgress, storyDebt } from '@shared/interview/stories';
+import type { StoryAnswers, StoryBank } from '@shared/interview/stories';
 import type { QBankLog, QuestionBank } from '@shared/interview/qbank';
 import type { InterviewPlan, TrackKey } from '@shared/interview/types';
 import type { LeetCodeLog, ProblemBank } from '@shared/interview/leetcode';
@@ -29,6 +31,7 @@ interface Bundle {
   plan: InterviewPlan;
   notes?: Record<string, { body: string; updated?: string }>;
   qbank: { bank: QuestionBank; log: QBankLog };
+  stories?: { bank: StoryBank; answers: StoryAnswers };
   leetcode: { bank: ProblemBank; log: LeetCodeLog };
 }
 
@@ -69,10 +72,12 @@ export function OverviewPane() {
     window.addEventListener('interview:leetcode-updated', onUpdated);
     window.addEventListener('interview:qbank-updated', onUpdated);
     window.addEventListener('interview:topic-updated', onUpdated);
+    window.addEventListener('interview:stories-updated', onUpdated);
     return () => {
       window.removeEventListener('interview:leetcode-updated', onUpdated);
       window.removeEventListener('interview:qbank-updated', onUpdated);
       window.removeEventListener('interview:topic-updated', onUpdated);
+      window.removeEventListener('interview:stories-updated', onUpdated);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -111,6 +116,20 @@ export function OverviewPane() {
           itemsByCategory,
         ),
       ).map(([id, m]) => [id, { ...m, unit: '题' }]),
+      ...clusterProgress(
+        bundle.stories?.bank ?? { stories: [] },
+        bundle.stories?.answers ?? {},
+      ).map((c) => [
+        c.cluster.id,
+        {
+          done: c.done,
+          partial: Math.max(0, c.touched - c.done),
+          total: Math.max(0, c.total - c.dropped),
+          due: c.flagged,
+          unit: '问',
+          entries: [],
+        },
+      ]),
     ]);
     const coverage = inventoryCoverage(plan, metrics);
     const elapsed = plan.meta.startDate
@@ -139,6 +158,10 @@ export function OverviewPane() {
           ] as TrackKey[])
         : [],
       debt: reviewDebt(bundle.leetcode.bank, bundle.leetcode.log, today),
+      sdebt: storyDebt(
+        bundle.stories?.bank ?? { stories: [] },
+        bundle.stories?.answers ?? {},
+      ),
       qdebt: qbankDebt(
         bundle.qbank?.bank ?? { questions: [] },
         bundle.qbank?.log ?? {},
@@ -199,6 +222,22 @@ export function OverviewPane() {
               {model.debt.due}
             </span>{' '}
             · 未做 {model.debt.newCount}
+          </span>
+          <span className="text-[11px] text-stone-500 border-l border-stone-200 pl-2">
+            简历 说得出{' '}
+            <span className="font-mono font-semibold text-stone-600">
+              {model.sdebt.spoken}
+            </span>
+            /{model.sdebt.total}
+            {model.sdebt.flagged > 0 && (
+              <>
+                {' '}
+                · 待改{' '}
+                <span className="font-mono font-semibold text-amber-600">
+                  {model.sdebt.flagged}
+                </span>
+              </>
+            )}
           </span>
           <span className="text-[11px] text-stone-500 border-l border-stone-200 pl-2">
             题库 已答{' '}

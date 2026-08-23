@@ -29,7 +29,9 @@ import { QuestionRecord, QuestionMeta } from './interview/QuestionRecord';
 import { AddQuestion } from './interview/AddQuestion';
 import { PaperPanel } from './interview/PaperPanel';
 import { PaperUnit } from './interview/PaperUnit';
+import { ChallengeRecord, ChallengeMeta } from './interview/ChallengeRecord';
 import { parseQuestionUnit } from '@shared/interview/qbank';
+import type { StoryAnswer, StoryBank } from '@shared/interview/stories';
 import { usePullToRefresh } from './training/usePullToRefresh';
 
 const PTR_THRESHOLD = 60;
@@ -86,6 +88,40 @@ export function InterviewEditor() {
   /** Which paper's workbench is open, if any. */
   const [openPaper, setOpenPaper] = useState<string | null>(null);
   const [paperIds, setPaperIds] = useState<string[]>([]);
+  const [cmeta, setCmeta] = useState<Record<string, ChallengeMeta>>({});
+  const [canswers, setCanswers] = useState<Record<string, StoryAnswer>>({});
+  const loadStories = useCallback(() => {
+    fetch('/api/interview/stories')
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d: { bank: StoryBank; answers: Record<string, Record<string, StoryAnswer>> }) => {
+        const m: Record<string, ChallengeMeta> = {};
+        for (const st of d.bank.stories ?? []) {
+          for (const c of st.clusters) {
+            for (const q of c.questions) {
+              m[q.id] = {
+                ...q,
+                storyId: st.id,
+                storyTitle: st.title,
+                clusterTitle: c.title,
+              };
+            }
+          }
+        }
+        setCmeta(m);
+        const flat: Record<string, StoryAnswer> = {};
+        for (const perStory of Object.values(d.answers ?? {})) {
+          for (const [qid, a] of Object.entries(perStory)) flat[qid] = a;
+        }
+        setCanswers(flat);
+      })
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
+    loadStories();
+    const h = () => loadStories();
+    window.addEventListener('interview:stories-updated', h);
+    return () => window.removeEventListener('interview:stories-updated', h);
+  }, [loadStories]);
   useEffect(() => {
     fetch('/api/interview/papers')
       .then((r) => (r.ok ? r.json() : Promise.reject()))
@@ -294,6 +330,8 @@ export function InterviewEditor() {
                 problemItem={problemItem}
                 paperIds={paperIds}
                 onOpenPaper={setOpenPaper}
+                cmeta={cmeta}
+                canswers={canswers}
                 qmeta={qmeta}
                 qanswers={qanswers}
                 links={links}
@@ -318,6 +356,8 @@ function DayCard({
   problemItem,
   paperIds,
   onOpenPaper,
+  cmeta,
+  canswers,
   qmeta,
   qanswers,
   links,
@@ -332,6 +372,8 @@ function DayCard({
   problemItem: Record<number, string>;
   paperIds: string[];
   onOpenPaper: (id: string) => void;
+  cmeta: Record<string, ChallengeMeta>;
+  canswers: Record<string, StoryAnswer>;
   qmeta: Record<string, QuestionMeta>;
   qanswers: Record<string, string>;
   links: { tasks: Record<string, string>; problems: Record<number, string> };
@@ -398,6 +440,8 @@ function DayCard({
               problemItem={problemItem}
               paperIds={paperIds}
               onOpenPaper={onOpenPaper}
+              cmeta={cmeta}
+              canswers={canswers}
               itemsByTask={day.itemsByTask}
               qmeta={qmeta}
               qanswers={qanswers}
@@ -474,6 +518,8 @@ function BlockRow({
   problemItem,
   paperIds,
   onOpenPaper,
+  cmeta,
+  canswers,
   itemsByTask,
   qmeta,
   qanswers,
@@ -492,6 +538,8 @@ function BlockRow({
   problemItem: Record<number, string>;
   paperIds: string[];
   onOpenPaper: (id: string) => void;
+  cmeta: Record<string, ChallengeMeta>;
+  canswers: Record<string, StoryAnswer>;
   itemsByTask: Record<string, string>;
   qmeta: Record<string, QuestionMeta>;
   qanswers: Record<string, string>;
@@ -604,6 +652,16 @@ function BlockRow({
               onChange: (s: UnitStatus, t: string) =>
                 onToggleUnitStatus(dateStr, blockIdx, unitIdx, s, t),
             };
+            if (/^\[[a-z]{2}-[a-z]+-\d+\]/.test(unit.trailing.trim())) {
+              return (
+                <ChallengeRecord
+                  key={unitIdx}
+                  {...common}
+                  meta={cmeta}
+                  saved={canswers}
+                />
+              );
+            }
             return parseQuestionUnit(unit.trailing) ? (
               <QuestionRecord
                 key={unitIdx}

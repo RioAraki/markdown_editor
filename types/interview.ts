@@ -201,12 +201,30 @@ export interface BlocksResponse {
   blocks: BlockLite[];
 }
 
+/** One resume deep-dive challenge picked for today. */
+export interface SuggestedStoryQuestion {
+  id: string;
+  storyId: string;
+  storyTitle: string;
+  clusterTitle: string;
+  q: string;
+  tests: string;
+  lens: string;
+  p: 0 | 1 | 2;
+  status: string;
+  grade?: string;
+  reason: string;
+  unitText: string;
+}
+
 export interface TodayPlanResponse {
   today: string;
   /** Task name → the problems recommended for its checkboxes, in order. */
   suggestedProblems: Record<string, SuggestedProblem[]>;
   /** Task name → the concrete Agent-bank questions picked for it. */
   suggestedQuestions: Record<string, SuggestedQuestion[]>;
+  /** Task name → the resume challenges picked for it. */
+  suggestedStories: Record<string, SuggestedStoryQuestion[]>;
   /** Prescription resolved from phase × weekday (or a date override). */
   suggestion?: PlanDayLite;
   /** All templates, so the user can override the suggestion. */
@@ -233,6 +251,8 @@ export interface CreateDayRequest {
   problems?: Record<string, number[]>;
   /** Task name → ordered Agent-bank question ids, one per checkbox. */
   questions?: Record<string, string[]>;
+  /** Task name → ordered resume-challenge ids, one per checkbox. */
+  challenges?: Record<string, string[]>;
 }
 
 export interface MasteryEntryLite {

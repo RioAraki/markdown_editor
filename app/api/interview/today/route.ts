@@ -14,11 +14,16 @@ import {
   loadLeetCode,
   loadQBank,
   loadPapers,
+  loadStories,
 } from '@shared/interview/load';
 import { parseProblemUnit } from '@shared/interview/leetcode';
 import { parseQuestionUnit } from '@shared/interview/qbank';
 import { recommendQuestions } from '@shared/interview/qbank';
 import { carryOver, dayFromBlocks } from '@shared/interview/core';
+import {
+  pickQuestions as pickStoryQuestions,
+  questionUnitText as storyUnitText,
+} from '@shared/interview/stories';
 import { recommendProblems } from '@shared/interview/leetcode';
 import { TodayPlanResponse } from '@/types/interview';
 
@@ -28,7 +33,7 @@ const DATA_DIR = path.dirname(
 
 export async function GET(req: Request) {
   try {
-    const [plan, inventory, mastery, touches, leetcode, qbank, fullPlan, papers] =
+    const [plan, inventory, mastery, touches, leetcode, qbank, fullPlan, papers, stories] =
       await Promise.all([
       loadPlan(),
       loadInventory(),
@@ -38,6 +43,7 @@ export async function GET(req: Request) {
       loadQBank(DATA_DIR),
       loadInterviewPlan(DATA_DIR),
       loadPapers(DATA_DIR),
+      loadStories(DATA_DIR),
     ]);
 
     // itemId → the bank's own category name, so a 题库 slot bound to `qb-rag`
@@ -187,7 +193,8 @@ export async function GET(req: Request) {
     for (const [id, cat] of Object.entries(categoryOf)) itemOfCategory[cat] = id;
 
     for (const task of suggestion?.tasks ?? []) {
-      if (!(task.pool ?? []).includes('ai-qbank')) continue;
+      const isPy = (task.pool ?? []).some((x) => x.startsWith('py-'));
+      if (!isPy && !(task.pool ?? []).includes('ai-qbank')) continue;
       // Deliberately not restricted to the slot's category. Unlike LeetCode
       // topics, which are interchangeable, this bank is written 由浅入深 as one
       // sequence — 基础概念 before 核心框架 before RAG. Binding a category first
@@ -195,6 +202,8 @@ export async function GET(req: Request) {
       const recs = recommendQuestions({
         bank: qbank.bank,
         log: qbank.log,
+        // Each bank walks its own list in order; they never interleave.
+        bankId: isPy ? 'python' : 'agent',
         category: null,
         count: Math.max(1, task.units),
         today,
@@ -251,9 +260,53 @@ export async function GET(req: Request) {
       for (const c of carriedQ) usedQuestions.add(c.id);
     }
 
+    // 简历深挖 slots: the front-line cluster decides both the questions and
+    // which inventory item the slot binds to. Sprint order, never random.
+    const suggestedStories: TodayPlanResponse['suggestedStories'] = {};
+    for (const task of suggestion?.tasks ?? []) {
+      if (!(task.pool ?? []).some((x) => x.startsWith('rs-'))) continue;
+      const picks = pickStoryQuestions(
+        stories.bank,
+        stories.answers,
+        Math.max(1, task.units),
+      );
+      if (picks.length === 0) continue;
+
+      // Bind the slot to the cluster the questions came from, so the day log
+      // reads "简历深挖 · eval 与质量" rather than a project-level label.
+      const bound = choices.find((c) => c.id === picks[0].cluster.id);
+      if (bound) {
+        suggestedItems[task.name] = {
+          id: bound.id,
+          title: bound.title,
+          domainLabel: bound.domainLabel,
+          moduleLabel: bound.moduleLabel,
+          touches: bound.touches,
+          how: bound.how,
+          test: bound.test,
+        };
+        used.add(bound.id);
+      }
+      suggestedStories[task.name] = picks.map((pk) => ({
+        id: pk.question.id,
+        storyId: pk.story.id,
+        storyTitle: pk.story.title,
+        clusterTitle: pk.cluster.title,
+        q: pk.question.q,
+        tests: pk.question.tests,
+        lens: pk.question.lens,
+        p: pk.question.p,
+        status: pk.answer?.status ?? 'todo',
+        grade: pk.answer?.grade,
+        reason: pk.reason,
+        unitText: storyUnitText(pk.story, pk.question),
+      }));
+    }
+
     const response: TodayPlanResponse = {
       today,
       suggestedQuestions,
+      suggestedStories,
       suggestion,
       templates: plan.templates ?? [],
       suggestedProblems,

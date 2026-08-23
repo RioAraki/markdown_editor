@@ -17,7 +17,12 @@ const DATA_DIR = path.dirname(
  */
 export async function POST(req: Request) {
   try {
-    const body: { exclude?: string[]; category?: string; count?: number } =
+    const body: {
+      exclude?: string[];
+      category?: string;
+      bankId?: string;
+      count?: number;
+    } =
       await req.json().catch(() => ({}));
 
     const { bank, log } = await loadQBank(DATA_DIR);
@@ -27,6 +32,7 @@ export async function POST(req: Request) {
       bank,
       log,
       category: body.category ?? null,
+      bankId: body.bankId ?? null,
       count: Math.min(Math.max(body.count ?? 1, 1), 5),
       today,
       exclude: new Set(body.exclude ?? []),
