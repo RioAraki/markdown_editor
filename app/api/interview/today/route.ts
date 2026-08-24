@@ -24,7 +24,7 @@ import {
   pickQuestions as pickStoryQuestions,
   questionUnitText as storyUnitText,
 } from '@shared/interview/stories';
-import { recommendProblems } from '@shared/interview/leetcode';
+import { MIN_REPEAT_DAYS, recommendProblems } from '@shared/interview/leetcode';
 import { TodayPlanResponse } from '@/types/interview';
 
 const DATA_DIR = path.dirname(
@@ -153,9 +153,24 @@ export async function GET(req: Request) {
 
       // Unfinished problems from the last session go back on the card first,
       // and take slots away from new ones rather than adding to the load.
+      //
+      // "Unfinished" means the day file's box is unticked — but that box never
+      // gets ticked retroactively when the problem is solved on a later day, so
+      // it must be cross-checked against the attempt log. Without this, a stale
+      // unticked line from last Friday keeps re-scheduling a problem you have
+      // since finished.
       const resume = (pending.get(task.name)?.units ?? [])
         .map((u) => parseProblemUnit(u)?.id)
         .filter((id): id is number => typeof id === 'number')
+        .filter((id) => {
+          const last = (leetcode.log[String(id)]?.attempts ?? []).at(-1);
+          if (!last) return true;
+          const gap = Math.round(
+            (Date.parse(`${today}T00:00:00`) - Date.parse(`${last.date}T00:00:00`)) /
+              86_400_000,
+          );
+          return gap >= MIN_REPEAT_DAYS;
+        })
         .map((id) => leetcode.bank.problems.find((p) => p.id === id))
         .filter((p): p is NonNullable<typeof p> => !!p);
 

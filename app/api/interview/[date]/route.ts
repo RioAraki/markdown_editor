@@ -115,6 +115,20 @@ async function reconcileLeetCodeLog(date: string, content: string) {
   }
 
   if (!changed) return;
+
+  // Belt and braces. This function rewrites the whole file, so a bad read on
+  // the way in would silently replace years of history with one day's worth.
+  // The only legitimate shrink is dropping entries for `date` itself, so
+  // anything beyond that means the input was wrong — abort rather than write.
+  const before = Object.keys(log).length;
+  const after = Object.keys(store).length;
+  if (before > 0 && after < before - claimed.size - 8) {
+    console.error(
+      `Refusing to shrink leetcode-log from ${before} to ${after} entries while reconciling ${date}`,
+    );
+    return;
+  }
+
   const logPath = path.join(DATA_DIR, 'leetcode-log.json');
   await fs.writeFile(logPath, JSON.stringify(store, null, 2) + '\n', 'utf-8');
 }
