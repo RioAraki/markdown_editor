@@ -11,9 +11,9 @@ const DATA_DIR = path.dirname(
 /**
  * One more question, for a slot with time to spare.
  *
- * Body: `{ exclude?: string[], category?: string, count?: number }`. A pending
- * redo is cleared first — that flag is you telling yourself the answer wasn't
- * good enough, which beats covering new ground.
+ * Body: `{ exclude?: string[], bankId?: string, category?: string, count?: number }`.
+ * `bankId` is required in practice: the banks are merged behind one endpoint,
+ * and without it a Python slot draws from the Agent bank.
  */
 export async function POST(req: Request) {
   try {
@@ -36,7 +36,10 @@ export async function POST(req: Request) {
       count: Math.min(Math.max(body.count ?? 1, 1), 5),
       today,
       exclude: new Set(body.exclude ?? []),
-      redoQuota: 1,
+      // These banks are walked front to back, so an extra question is simply
+      // the next unanswered one — no redo injected, nothing random. The daily
+      // slot already carries the one redo per day.
+      redoQuota: 0,
     });
 
     return NextResponse.json({
