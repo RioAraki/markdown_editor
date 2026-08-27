@@ -33,7 +33,11 @@ export function AddQuestion({
       // Without this a Python slot happily served an Agent question — the ids
       // carry the bank (`py01-…` vs `01-…`), so read it off what is already
       // on the card rather than threading another prop down.
-      const bankId = parsed.some((p) => p.id.startsWith('py')) ? 'python' : 'agent';
+      const bankId = parsed.some((p) => p.id.startsWith('py'))
+        ? 'python'
+        : parsed.some((p) => p.id.startsWith('be'))
+          ? 'backend'
+          : 'agent';
       const res = await fetch('/api/interview/qbank/next', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

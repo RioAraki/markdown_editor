@@ -233,8 +233,16 @@ export async function GET(req: Request) {
     for (const [id, cat] of Object.entries(categoryOf)) itemOfCategory[cat] = id;
 
     for (const task of suggestion?.tasks ?? []) {
-      const isPy = (task.pool ?? []).some((x) => x.startsWith('py-'));
-      if (!isPy && !(task.pool ?? []).includes('ai-qbank')) continue;
+      // Three banks share this machinery; the slot's pool says which one.
+      const pool = task.pool ?? [];
+      const bankId = pool.some((x) => x.startsWith('py-'))
+        ? 'python'
+        : pool.includes('fd-core')
+          ? 'backend'
+          : pool.includes('ai-qbank')
+            ? 'agent'
+            : null;
+      if (!bankId) continue;
       // Deliberately not restricted to the slot's category. Unlike LeetCode
       // topics, which are interchangeable, this bank is written 由浅入深 as one
       // sequence — 基础概念 before 核心框架 before RAG. Binding a category first
@@ -243,7 +251,7 @@ export async function GET(req: Request) {
         bank: qbank.bank,
         log: qbank.log,
         // Each bank walks its own list in order; they never interleave.
-        bankId: isPy ? 'python' : 'agent',
+        bankId,
         category: null,
         count: Math.max(1, task.units),
         today,
