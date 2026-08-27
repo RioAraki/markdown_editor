@@ -24,7 +24,11 @@ import {
   pickQuestions as pickStoryQuestions,
   questionUnitText as storyUnitText,
 } from '@shared/interview/stories';
-import { MIN_REPEAT_DAYS, recommendProblems } from '@shared/interview/leetcode';
+import {
+  MIN_REPEAT_DAYS,
+  currentTopic,
+  recommendProblems,
+} from '@shared/interview/leetcode';
 import { TodayPlanResponse } from '@/types/interview';
 
 const DATA_DIR = path.dirname(
@@ -114,6 +118,20 @@ export async function GET(req: Request) {
         }
       }
 
+      // 刷题 follows the course, not the least-touched heuristic.
+      if (task.track === 'leetcode') {
+        const t = currentTopic(
+          leetcode.bank,
+          leetcode.log,
+          today,
+          inventory.domains
+            .filter((d) => d.id === 'leetcode')
+            .flatMap((d) => d.modules)
+            .flatMap((m) => m.items.map((it) => it.id)),
+        );
+        if (t) resumeId = t.itemId;
+      }
+
       const pick =
         (resumeId && choices.find((c) => c.id === resumeId)) ||
         suggestForTrack(choices, inventory, task.track, used, task.pool);
@@ -136,15 +154,22 @@ export async function GET(req: Request) {
     // problems, mixing overdue reviews with new ones from that topic.
     const usedProblems = new Set<number>();
     const suggestedProblems: TodayPlanResponse['suggestedProblems'] = {};
+    // The course order, straight off the inventory — 阶段一 first, and each
+    // stage's points in the order they were laid out.
+    const courseOrder = inventory.domains
+      .filter((d) => d.id === 'leetcode')
+      .flatMap((d) => d.modules)
+      .flatMap((m) => m.items.map((it) => it.id));
+    const topic = currentTopic(leetcode.bank, leetcode.log, today, courseOrder);
+
     for (const task of suggestion?.tasks ?? []) {
       if (task.track !== 'leetcode') continue;
       const recs = recommendProblems({
         bank: leetcode.bank,
         log: leetcode.log,
-        // Deliberately not restricted to the slot's bound topic. Binding one
-        // topic per day meant every problem drilled the same insight; the
-        // recommender spreads across topics instead.
-        itemId: null,
+        // One knowledge point at a time until the course is done; null after
+        // that, which is the random phase.
+        itemId: topic?.itemId ?? null,
         count: Math.max(1, task.units),
         today,
         exclude: usedProblems,
