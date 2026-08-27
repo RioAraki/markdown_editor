@@ -8,19 +8,16 @@ import { TaskUnit } from '@/types/interview';
 /**
  * "今天还有时间，再来一题".
  *
- * The day's plan sets a target, not a ceiling. This asks the recommender for
- * one more problem — excluding what's already on the card and biased away from
- * patterns already drilled today, so an extra problem widens coverage instead
- * of grinding the same groove.
+ * The day's plan sets a target, not a ceiling. The server decides *which*
+ * problem: while the course is unfinished it comes from the knowledge point
+ * under study, so an extra problem deepens the current pattern rather than
+ * scattering. All this sends is what is already on the card.
  */
 export function AddProblem({
   units,
-  problemTopic,
   onAdd,
 }: {
   units: TaskUnit[];
-  /** problemId → 考点名, used to tell the API which patterns today already hit. */
-  problemTopic?: Record<number, string>;
   onAdd: (trailing: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -33,15 +30,10 @@ export function AddProblem({
       const ids = units
         .map((u) => parseProblemUnit(u.trailing)?.id)
         .filter((n): n is number => typeof n === 'number');
-      const topics = [
-        ...new Set(
-          ids.map((id) => problemTopic?.[id]).filter((t): t is string => !!t),
-        ),
-      ];
       const res = await fetch('/api/interview/leetcode/next', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ exclude: ids, topics, count: 1 }),
+        body: JSON.stringify({ exclude: ids, count: 1 }),
       });
       if (!res.ok) throw new Error();
       const d: { problems: { unitText: string }[] } = await res.json();
@@ -64,7 +56,7 @@ export function AddProblem({
         onClick={pick}
         disabled={busy}
         className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-50 transition-colors"
-        title="按推荐再加一题，会避开今天已经练过的考点"
+        title="按课程再加一题 —— 还在攻当前知识点，不会跳到别的专题"
       >
         {busy ? (
           <Loader2 className="w-3 h-3 animate-spin" />

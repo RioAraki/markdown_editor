@@ -683,7 +683,6 @@ function BlockRow({
         {isProblemBlock && (
           <AddProblem
             units={block.units}
-            problemTopic={problemTopic}
             onAdd={(trailing) => onAppendUnit(dateStr, blockIdx, trailing)}
           />
         )}
