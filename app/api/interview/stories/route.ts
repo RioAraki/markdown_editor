@@ -90,12 +90,39 @@ export async function PUT(req: Request) {
     const next: StoryAnswer = { ...prev };
 
     if (typeof body.answer === 'string') {
-      next.answer = body.answer.trim() || undefined;
-      // Writing something makes it a draft; a rewrite of a flagged answer
-      // stays flagged until the review pass clears it.
+      const text = body.answer.trim();
+      const today = format(new Date(), 'yyyy-MM-dd');
+
+      // Rewriting a graded answer archives the old one together with the grade
+      // and gaps it earned. Without this the rewrite reads as if it were the
+      // first attempt, and the whole point of the flagged → rewrite loop —
+      // seeing what changed and why — is lost. Editing on the same day is not
+      // a new attempt, so it just replaces the draft.
+      const isRewrite =
+        prev.status === 'flagged' &&
+        !!prev.answer &&
+        text !== prev.answer &&
+        !!text;
+      if (isRewrite) {
+        next.revisions = [
+          ...(prev.revisions ?? []),
+          {
+            date: prev.date ?? today,
+            text: prev.answer as string,
+            grade: prev.grade,
+            gaps: prev.gaps,
+          },
+        ];
+        // The old review belongs to the old text, which now lives in history.
+        next.grade = undefined;
+        next.gaps = undefined;
+        next.status = 'draft';
+      }
+
+      next.answer = text || undefined;
       if (next.answer && prev.status === 'todo') next.status = 'draft';
       if (!next.answer) next.status = 'todo';
-      next.date = format(new Date(), 'yyyy-MM-dd');
+      next.date = today;
     }
     if (body.status && STATUSES.includes(body.status as AnswerStatus)) {
       next.status = body.status as AnswerStatus;

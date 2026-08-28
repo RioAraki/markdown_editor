@@ -31,10 +31,22 @@ import { PaperPanel } from './interview/PaperPanel';
 import { PaperUnit } from './interview/PaperUnit';
 import { ChallengeRecord, ChallengeMeta } from './interview/ChallengeRecord';
 import { parseQuestionUnit } from '@shared/interview/qbank';
+import { OUTCOME_LABEL } from '@shared/interview/leetcode';
+import type { AttemptEntry } from './interview/AttemptHistory';
 import type { StoryAnswer, StoryBank } from '@shared/interview/stories';
 import { usePullToRefresh } from './training/usePullToRefresh';
 
 const PTR_THRESHOLD = 60;
+
+/** 结果 → 小徽章配色，和 UnitRecord 里那套一致。 */
+const OUTCOME_TONE_CHIP: Record<string, string> = {
+  failed: 'bg-red-100 text-red-700',
+  'used-solution': 'bg-orange-100 text-orange-700',
+  struggled: 'bg-amber-100 text-amber-800',
+  suboptimal: 'bg-lime-100 text-lime-800',
+  clean: 'bg-emerald-100 text-emerald-700',
+  unknown: 'bg-stone-200 text-stone-600',
+};
 
 interface Handlers {
   onToggleTaskStatus: (
@@ -85,6 +97,10 @@ export function InterviewEditor() {
   // problem was testing; never shown before an outcome is recorded.
   const [problemTopic, setProblemTopic] = useState<Record<number, string>>({});
   const [problemItem, setProblemItem] = useState<Record<number, string>>({});
+  /** problemId → 历次尝试，供卡片展示「以前写过什么」。 */
+  const [attempts, setAttempts] = useState<Record<number, AttemptEntry[]>>({});
+  /** questionId → 历次作答。 */
+  const [qhistory, setQhistory] = useState<Record<string, AttemptEntry[]>>({});
   /** Which paper's workbench is open, if any. */
   const [openPaper, setOpenPaper] = useState<string | null>(null);
   const [paperIds, setPaperIds] = useState<string[]>([]);
@@ -149,11 +165,17 @@ export function InterviewEditor() {
         }
         setQmeta(meta);
         const latest: Record<string, string> = {};
+        const hist: Record<string, AttemptEntry[]> = {};
         for (const [id, rec] of Object.entries(d.log ?? {})) {
-          const a = rec.answers?.[rec.answers.length - 1];
+          const list = rec.answers ?? [];
+          const a = list[list.length - 1];
           if (a) latest[id] = a.text;
+          if (list.length > 0) {
+            hist[id] = list.map((x) => ({ date: x.date, text: x.text }));
+          }
         }
         setQanswers(latest);
+        setQhistory(hist);
       })
       .catch(() => {});
   }, []);
@@ -174,7 +196,11 @@ export function InterviewEditor() {
     let cancelled = false;
     fetch('/api/interview/leetcode')
       .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((d: { bank: { problems: { id: number; item: string | null }[] }; topics: Record<string, string> }) => {
+      .then((d: {
+        bank: { problems: { id: number; item: string | null }[] };
+        topics: Record<string, string>;
+        log: Record<string, { attempts: { date: string; outcome: string; note?: string }[] }>;
+      }) => {
         if (cancelled) return;
         const m: Record<number, string> = {};
         const items: Record<number, string> = {};
@@ -185,6 +211,20 @@ export function InterviewEditor() {
         }
         setProblemTopic(m);
         setProblemItem(items);
+
+        const hist: Record<number, AttemptEntry[]> = {};
+        for (const [pid, rec] of Object.entries(d.log ?? {})) {
+          const rows = (rec.attempts ?? [])
+            .filter((a) => a.note || a.outcome !== 'unknown')
+            .map((a) => ({
+              date: a.date,
+              verdict: OUTCOME_LABEL[a.outcome as keyof typeof OUTCOME_LABEL],
+              tone: OUTCOME_TONE_CHIP[a.outcome] ?? undefined,
+              text: a.note,
+            }));
+          if (rows.length > 0) hist[Number(pid)] = rows;
+        }
+        setAttempts(hist);
       })
       .catch(() => {});
     return () => {
@@ -328,6 +368,8 @@ export function InterviewEditor() {
                 isToday={shownDay.dateStr === today}
                 problemTopic={problemTopic}
                 problemItem={problemItem}
+                attempts={attempts}
+                qhistory={qhistory}
                 paperIds={paperIds}
                 onOpenPaper={setOpenPaper}
                 cmeta={cmeta}
@@ -354,6 +396,8 @@ function DayCard({
   isToday,
   problemTopic,
   problemItem,
+  attempts,
+  qhistory,
   paperIds,
   onOpenPaper,
   cmeta,
@@ -370,6 +414,8 @@ function DayCard({
   isToday: boolean;
   problemTopic: Record<number, string>;
   problemItem: Record<number, string>;
+  attempts: Record<number, AttemptEntry[]>;
+  qhistory: Record<string, AttemptEntry[]>;
   paperIds: string[];
   onOpenPaper: (id: string) => void;
   cmeta: Record<string, ChallengeMeta>;
@@ -438,6 +484,8 @@ function DayCard({
               blockIdx={blockIdx}
               problemTopic={problemTopic}
               problemItem={problemItem}
+              attempts={attempts}
+              qhistory={qhistory}
               paperIds={paperIds}
               onOpenPaper={onOpenPaper}
               cmeta={cmeta}
@@ -516,6 +564,8 @@ function BlockRow({
   blockIdx,
   problemTopic,
   problemItem,
+  attempts,
+  qhistory,
   paperIds,
   onOpenPaper,
   cmeta,
@@ -536,6 +586,8 @@ function BlockRow({
   blockIdx: number;
   problemTopic: Record<number, string>;
   problemItem: Record<number, string>;
+  attempts: Record<number, AttemptEntry[]>;
+  qhistory: Record<string, AttemptEntry[]>;
   paperIds: string[];
   onOpenPaper: (id: string) => void;
   cmeta: Record<string, ChallengeMeta>;
@@ -668,6 +720,7 @@ function BlockRow({
                 {...common}
                 meta={qmeta}
                 savedAnswer={qanswers}
+                history={qhistory}
               />
             ) : (
               <UnitRecord
@@ -675,6 +728,7 @@ function BlockRow({
                 {...common}
                 problemTopic={problemTopic}
                 problemItem={problemItem}
+                attempts={attempts}
                 problemUrl={links.problems}
               />
             );

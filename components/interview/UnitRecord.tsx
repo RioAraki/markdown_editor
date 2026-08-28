@@ -13,6 +13,7 @@ import {
   redoHintIn,
 } from '@shared/interview/leetcode';
 import { UnitStatus } from '@/types/interview';
+import { AttemptHistory, AttemptEntry } from './AttemptHistory';
 
 /**
  * One checkbox of a task — and the record of what actually happened on it.
@@ -114,6 +115,7 @@ export function UnitRecord({
   problemTopic,
   problemUrl,
   problemItem,
+  attempts,
   onChange,
 }: {
   index: number;
@@ -131,6 +133,8 @@ export function UnitRecord({
   /** problemId -> which inventory topic it belongs to, so a lesson lands
    *  in the right file. */
   problemItem?: Record<number, string>;
+  /** problemId → 以前每一次的尝试，最早在前。 */
+  attempts?: Record<number, AttemptEntry[]>;
   onChange: (status: UnitStatus, trailing: string) => void;
 }) {
   const parts = decompose(trailing);
@@ -443,6 +447,15 @@ export function UnitRecord({
                 </button>
               ))}
             </div>
+          )}
+
+          {parts.problemId !== undefined && (
+            <AttemptHistory
+              entries={(attempts?.[parts.problemId] ?? []).filter(
+                (e) => e.date !== dateStr,
+              )}
+              label="以前做这题写过什么"
+            />
           )}
 
           <div>

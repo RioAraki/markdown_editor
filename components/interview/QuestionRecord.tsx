@@ -8,6 +8,7 @@ import {
   parseQuestionUnit,
 } from '@shared/interview/qbank';
 import { UnitStatus } from '@/types/interview';
+import { AttemptHistory, AttemptEntry } from './AttemptHistory';
 
 /**
  * One Agent-bank question inside a day card.
@@ -33,6 +34,7 @@ export function QuestionRecord({
   dateStr,
   meta,
   savedAnswer,
+  history,
   onChange,
 }: {
   index: number;
@@ -43,6 +45,8 @@ export function QuestionRecord({
   meta?: Record<string, QuestionMeta>;
   /** questionId → what the archive file already holds for this date. */
   savedAnswer?: Record<string, string>;
+  /** questionId → 以前每一次的作答，最早在前。 */
+  history?: Record<string, AttemptEntry[]>;
   onChange: (status: UnitStatus, trailing: string) => void;
 }) {
   const parsed = parseQuestionUnit(trailing);
@@ -214,6 +218,11 @@ export function QuestionRecord({
               </span>
             )}
           </div>
+
+          <AttemptHistory
+            entries={(history?.[parsed.id] ?? []).filter((e) => e.date !== dateStr)}
+            label="以前答过什么"
+          />
 
           <div>
             <label className="block text-[11px] text-stone-400 mb-1">

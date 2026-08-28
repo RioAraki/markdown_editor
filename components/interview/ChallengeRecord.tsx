@@ -10,6 +10,7 @@ import {
   StoryQuestion,
 } from '@shared/interview/stories';
 import { UnitStatus } from '@/types/interview';
+import { AttemptHistory } from './AttemptHistory';
 
 /**
  * One resume challenge in a day's log.
@@ -196,6 +197,17 @@ export function ChallengeRecord({
               </ul>
             </div>
           ) : null}
+
+          <AttemptHistory
+            entries={(rec?.revisions ?? []).map((r) => ({
+              date: r.date,
+              verdict: r.grade,
+              tone: r.grade ? GRADE_TONE[r.grade] : undefined,
+              text: r.text,
+              gaps: r.gaps,
+            }))}
+            label="以前的版本"
+          />
 
           <div>
             <div className="flex items-baseline justify-between mb-1">
