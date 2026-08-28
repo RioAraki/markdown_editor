@@ -340,6 +340,7 @@ export async function GET(req: Request) {
         storyId: pk.story.id,
         storyTitle: pk.story.title,
         clusterTitle: pk.cluster.title,
+        resumeAnchor: pk.cluster.resumeAnchor,
         q: pk.question.q,
         tests: pk.question.tests,
         lens: pk.question.lens,

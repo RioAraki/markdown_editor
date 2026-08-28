@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
 import { format } from 'date-fns';
-import { loadStories } from '@shared/interview/load';
+import { loadResume, loadStories } from '@shared/interview/load';
 import {
   AnswerStatus,
   Grade,
@@ -26,11 +26,15 @@ const GRADES: Grade[] = ['A', 'B', 'C', 'F'];
 /** The bank, your answers, where the front line is, and what is due next. */
 export async function GET(req: Request) {
   try {
-    const { bank, answers } = await loadStories(DATA_DIR);
+    const [{ bank, answers }, resume] = await Promise.all([
+      loadStories(DATA_DIR),
+      loadResume(DATA_DIR),
+    ]);
     const n = Number(new URL(req.url).searchParams.get('count') ?? 3);
     return NextResponse.json({
       bank,
       answers,
+      resume,
       progress: clusterProgress(bank, answers),
       current: currentCluster(bank, answers),
       next: pickQuestions(bank, answers, Math.min(Math.max(n, 1), 10)),

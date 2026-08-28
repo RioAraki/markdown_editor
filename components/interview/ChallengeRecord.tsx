@@ -10,7 +10,9 @@ import {
   StoryQuestion,
 } from '@shared/interview/stories';
 import { UnitStatus } from '@/types/interview';
+import type { Resume } from '@shared/interview/resume';
 import { AttemptHistory } from './AttemptHistory';
+import { ResumeAnchor } from './ResumeLine';
 
 /**
  * One resume challenge in a day's log.
@@ -26,6 +28,8 @@ export interface ChallengeMeta extends StoryQuestion {
   storyId: string;
   storyTitle: string;
   clusterTitle: string;
+  /** The resume line this cluster interrogates. */
+  resumeAnchor?: string;
 }
 
 const GRADE_TONE: Record<Grade, string> = {
@@ -49,11 +53,14 @@ export function ChallengeRecord({
   trailing,
   meta,
   saved,
+  resume,
   onChange,
 }: {
   index: number;
   status: UnitStatus;
   trailing: string;
+  /** The resume itself, so a challenge can show what it is challenging. */
+  resume?: Resume;
   /** questionId → what the bank says about it. */
   meta?: Record<string, ChallengeMeta>;
   /** questionId → what the story file already holds. */
@@ -154,6 +161,9 @@ export function ChallengeRecord({
                 {rec.grade}
               </span>
             )}
+            {q?.clusterTitle && (
+              <span className="text-stone-400 mr-1">{q.clusterTitle} ·</span>
+            )}
             <span className="text-stone-400">{STATUS_LABEL[st]}</span>
             {rec?.gaps?.[0] && (
               <span className="text-amber-700"> · {rec.gaps[0]}</span>
@@ -167,6 +177,8 @@ export function ChallengeRecord({
 
       {open && q && (
         <div className="px-3 pb-3 pt-1 border-t border-stone-200 space-y-2.5">
+          <ResumeAnchor resume={resume} anchor={q.resumeAnchor} />
+
           <div className="text-[11px] text-stone-500">
             <span className="text-stone-400">测的是：</span>
             {q.tests}

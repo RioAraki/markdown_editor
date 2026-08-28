@@ -33,6 +33,7 @@ import { ChallengeRecord, ChallengeMeta } from './interview/ChallengeRecord';
 import { parseQuestionUnit } from '@shared/interview/qbank';
 import { OUTCOME_LABEL } from '@shared/interview/leetcode';
 import type { AttemptEntry } from './interview/AttemptHistory';
+import type { Resume } from '@shared/interview/resume';
 import type { StoryAnswer, StoryBank } from '@shared/interview/stories';
 import { usePullToRefresh } from './training/usePullToRefresh';
 
@@ -106,10 +107,17 @@ export function InterviewEditor() {
   const [paperIds, setPaperIds] = useState<string[]>([]);
   const [cmeta, setCmeta] = useState<Record<string, ChallengeMeta>>({});
   const [canswers, setCanswers] = useState<Record<string, StoryAnswer>>({});
+  /** The resume itself, so a challenge can show the line it attacks. */
+  const [resume, setResume] = useState<Resume | undefined>();
   const loadStories = useCallback(() => {
     fetch('/api/interview/stories')
       .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((d: { bank: StoryBank; answers: Record<string, Record<string, StoryAnswer>> }) => {
+      .then((d: {
+        bank: StoryBank;
+        answers: Record<string, Record<string, StoryAnswer>>;
+        resume?: Resume;
+      }) => {
+        setResume(d.resume);
         const m: Record<string, ChallengeMeta> = {};
         for (const st of d.bank.stories ?? []) {
           for (const c of st.clusters) {
@@ -119,6 +127,7 @@ export function InterviewEditor() {
                 storyId: st.id,
                 storyTitle: st.title,
                 clusterTitle: c.title,
+                resumeAnchor: c.resumeAnchor,
               };
             }
           }
@@ -374,6 +383,7 @@ export function InterviewEditor() {
                 onOpenPaper={setOpenPaper}
                 cmeta={cmeta}
                 canswers={canswers}
+                resume={resume}
                 qmeta={qmeta}
                 qanswers={qanswers}
                 links={links}
@@ -402,6 +412,7 @@ function DayCard({
   onOpenPaper,
   cmeta,
   canswers,
+  resume,
   qmeta,
   qanswers,
   links,
@@ -420,6 +431,7 @@ function DayCard({
   onOpenPaper: (id: string) => void;
   cmeta: Record<string, ChallengeMeta>;
   canswers: Record<string, StoryAnswer>;
+  resume?: Resume;
   qmeta: Record<string, QuestionMeta>;
   qanswers: Record<string, string>;
   links: { tasks: Record<string, string>; problems: Record<number, string> };
@@ -570,6 +582,7 @@ function BlockRow({
   onOpenPaper,
   cmeta,
   canswers,
+  resume,
   itemsByTask,
   qmeta,
   qanswers,
@@ -592,6 +605,7 @@ function BlockRow({
   onOpenPaper: (id: string) => void;
   cmeta: Record<string, ChallengeMeta>;
   canswers: Record<string, StoryAnswer>;
+  resume?: Resume;
   itemsByTask: Record<string, string>;
   qmeta: Record<string, QuestionMeta>;
   qanswers: Record<string, string>;
