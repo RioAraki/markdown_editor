@@ -4,6 +4,7 @@ import {
   writeDiaryFile,
   createDiaryFile,
   diaryFileExists,
+  resolveDiaryFilename,
 } from '@/lib/diaryFileSystem';
 import { isValidDateFormat, getDiaryFilename } from '@/lib/dateUtils';
 import { DiaryContentResponse, ErrorResponse, SaveDiaryRequest } from '@/types/diary';
@@ -38,7 +39,9 @@ export async function GET(
     const response: DiaryContentResponse = {
       entry: {
         date,
-        filename: getDiaryFilename(date),
+        // Report the file we actually read, which may be the bare
+        // YYYY-MM-DD.md form rather than the `_public` default.
+        filename: (await resolveDiaryFilename(date)) ?? getDiaryFilename(date),
         content,
         exists: true,
       },
@@ -96,12 +99,12 @@ export async function POST(
     }
 
     // Create the diary file
-    await createDiaryFile(date);
+    const filename = await createDiaryFile(date);
 
     const response: DiaryContentResponse = {
       entry: {
         date,
-        filename: getDiaryFilename(date),
+        filename,
         content: '',
         exists: true,
       },
@@ -152,12 +155,12 @@ export async function PUT(
     }
 
     // Write the diary file
-    await writeDiaryFile(date, body.content);
+    const filename = await writeDiaryFile(date, body.content);
 
     const response: DiaryContentResponse = {
       entry: {
         date,
-        filename: getDiaryFilename(date),
+        filename,
         content: body.content,
         exists: true,
       },

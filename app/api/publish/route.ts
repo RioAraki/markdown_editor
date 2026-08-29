@@ -34,15 +34,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return NextResponse.json(
+        { error: 'Date must be in YYYY-MM-DD format' },
+        { status: 400 }
+      );
+    }
+
     const filename = `${date}_public.md`;
     const diaryFilePath = path.join(DIARY_DIR, filename);
 
-    // Check if the diary file exists
+    // Check if the diary file exists. Only `_public` files are publishable —
+    // the diary site refuses to serve a bare YYYY-MM-DD.md even via a guessed
+    // URL — so an entry stored in that form has to be renamed first.
     if (!fs.existsSync(diaryFilePath)) {
-      return NextResponse.json(
-        { error: `Diary file does not exist in D:\\diary\\data\\diary\\${filename}` },
-        { status: 404 }
-      );
+      const privateFilename = `${date}.md`;
+      const error = fs.existsSync(path.join(DIARY_DIR, privateFilename))
+        ? `${privateFilename} is a private entry and cannot be published. Rename it to ${filename} first.`
+        : `Diary file does not exist in D:\\diary\\data\\diary\\${filename}`;
+
+      return NextResponse.json({ error }, { status: 404 });
     }
 
     // Read existing share-tokens.json or create new structure
