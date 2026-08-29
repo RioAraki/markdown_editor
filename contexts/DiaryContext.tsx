@@ -1,9 +1,9 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { DiaryEntry } from '@/types/diary';
 import { useDiaries } from '@/hooks/useDiaries';
-import { useAutoSave } from '@/hooks/useAutoSave';
+import { useAutoSave, AutoSaveEntry } from '@/hooks/useAutoSave';
 import { getTodayDate } from '@/lib/dateUtils';
 
 interface DiaryContextType {
@@ -27,15 +27,19 @@ const DiaryContext = createContext<DiaryContextType | undefined>(undefined);
 export function DiaryProvider({ children }: { children: React.ReactNode }) {
   const { diaries, isLoading: isDiariesLoading, error: diariesError, refetch } = useDiaries();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [currentContent, setCurrentContent] = useState('');
+  // The date and its content are one value. Keeping them as two independent
+  // states is what allowed a save to be addressed to the newly selected date
+  // while carrying the previous date's text.
+  const [entry, setEntry] = useState<AutoSaveEntry | null>(null);
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [contentError, setContentError] = useState<string | null>(null);
 
-  // Auto-save functionality
-  const saveDiary = useCallback(async (content: string) => {
-    if (!selectedDate) return;
+  const currentContent = entry?.content ?? '';
 
-    const response = await fetch(`/api/diaries/${selectedDate}`, {
+  // Auto-save functionality. The date to write to comes from the entry being
+  // saved, not from whatever is selected when the request goes out.
+  const saveDiary = useCallback(async (date: string, content: string) => {
+    const response = await fetch(`/api/diaries/${date}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -46,37 +50,47 @@ export function DiaryProvider({ children }: { children: React.ReactNode }) {
     if (!response.ok) {
       throw new Error('Failed to save diary');
     }
-  }, [selectedDate]);
+  }, []);
 
   const { isSaving, lastSaved, error: saveError, hasUnsavedChanges, saveNow } = useAutoSave({
-    content: currentContent,
-    date: selectedDate,
+    entry,
     onSave: saveDiary,
   });
 
+  // Identifies the newest load, so a slow response for a date the user has
+  // already navigated away from cannot install its content under a later date.
+  const loadRequestRef = useRef(0);
+
   // Load diary content when a diary is selected
   const loadDiaryContent = useCallback(async (date: string) => {
+    const requestId = ++loadRequestRef.current;
+
     try {
       setIsLoadingContent(true);
       setContentError(null);
 
       const response = await fetch(`/api/diaries/${date}`);
 
+      let content = '';
       if (response.ok) {
         const data = await response.json();
-        setCurrentContent(data.entry.content || '');
-      } else if (response.status === 404) {
-        // Diary doesn't exist yet, set empty content
-        setCurrentContent('');
-      } else {
+        content = data.entry.content || '';
+      } else if (response.status !== 404) {
+        // A 404 just means the entry doesn't exist yet — start it empty.
         throw new Error('Failed to load diary');
       }
+
+      if (requestId !== loadRequestRef.current) return;
+      setEntry({ date, content });
     } catch (err) {
       console.error('Error loading diary:', err);
+      if (requestId !== loadRequestRef.current) return;
       setContentError(err instanceof Error ? err.message : 'Unknown error');
-      setCurrentContent('');
+      setEntry({ date, content: '' });
     } finally {
-      setIsLoadingContent(false);
+      if (requestId === loadRequestRef.current) {
+        setIsLoadingContent(false);
+      }
     }
   }, []);
 
@@ -88,7 +102,7 @@ export function DiaryProvider({ children }: { children: React.ReactNode }) {
 
   // Update content
   const updateContent = useCallback((content: string) => {
-    setCurrentContent(content);
+    setEntry(prev => (prev ? { ...prev, content } : prev));
   }, []);
 
   // Create a new diary entry
