@@ -17,10 +17,11 @@ import {
   loadStories,
 } from '@shared/interview/load';
 import { parseProblemUnit } from '@shared/interview/leetcode';
-import { parseQuestionUnit } from '@shared/interview/qbank';
+import { QBANK_REDO_DAYS, parseQuestionUnit } from '@shared/interview/qbank';
 import { recommendQuestions } from '@shared/interview/qbank';
 import { carryOver, dayFromBlocks } from '@shared/interview/core';
 import {
+  parseStoryUnit,
   pickQuestions as pickStoryQuestions,
   questionUnitText as storyUnitText,
 } from '@shared/interview/stories';
@@ -72,9 +73,52 @@ export async function GET(req: Request) {
 
     const choices = flattenInventory(inventory, touches, mastery);
 
+    const daysSince = (date: string) =>
+      Math.round(
+        (Date.parse(`${today}T00:00:00`) - Date.parse(`${date}T00:00:00`)) /
+          86_400_000,
+      );
+
+    /**
+     * Has this unit since been done, whatever an old day's checkbox says?
+     *
+     * Every unit type that has a durable record of its own belongs here. The
+     * checkbox on a past day is only evidence about that day — it is never
+     * ticked retroactively — so anything scheduled by checkbox alone gets
+     * re-served forever. Keeping the knowledge in one function means adding a
+     * new question bank is one case here, and forgetting is visible rather
+     * than showing up weeks later as the same question six days running.
+     *
+     * Units with no durable record (系统设计, 行为故事, C++, 定向补课) fall
+     * through to `false`: there the checkbox really is the only truth, so an
+     * unticked box correctly means still to do.
+     */
+    const isResolved = (unit: string): boolean => {
+      const p = parseProblemUnit(unit);
+      if (p) {
+        const last = (leetcode.log[String(p.id)]?.attempts ?? []).at(-1);
+        return !!last && daysSince(last.date) < MIN_REPEAT_DAYS;
+      }
+      const q = parseQuestionUnit(unit);
+      if (q) {
+        const rec = qbank.log[q.id];
+        if (!rec || rec.answers.length === 0) return false;
+        if (!rec.redo) return true;
+        const last = rec.answers[rec.answers.length - 1];
+        return daysSince(last.date) < QBANK_REDO_DAYS;
+      }
+      const s = parseStoryUnit(unit);
+      if (s) {
+        // Answers advance through their own file, not a day's box.
+        const a = Object.values(stories.answers).find((m) => m[s.id])?.[s.id];
+        return !!a && (a.status === 'spoken' || a.dropped === true);
+      }
+      return false;
+    };
+
     // Anything left unticked comes back before anything new is chosen.
     const pending = new Map(
-      carryOver(fullPlan, today).map((c) => [c.taskName, c]),
+      carryOver(fullPlan, today, 21, isResolved).map((c) => [c.taskName, c]),
     );
 
     // Auto-pick one inventory item per task slot, no repeats within the day.
@@ -118,7 +162,10 @@ export async function GET(req: Request) {
         }
       }
 
-      // 刷题 follows the course, not the least-touched heuristic.
+      // 刷题 follows the course, not the least-touched heuristic. It also
+      // overrides any carry-over, so the slot is not 'resumed from' the day
+      // that happened to schedule the same topic.
+      let byCourse = false;
       if (task.track === 'leetcode') {
         const t = currentTopic(
           leetcode.bank,
@@ -129,7 +176,10 @@ export async function GET(req: Request) {
             .flatMap((d) => d.modules)
             .flatMap((m) => m.items.map((it) => it.id)),
         );
-        if (t) resumeId = t.itemId;
+        if (t) {
+          resumeId = t.itemId;
+          byCourse = true;
+        }
       }
 
       const pick =
@@ -138,7 +188,10 @@ export async function GET(req: Request) {
       if (pick) {
         used.add(pick.id);
         suggestedItems[task.name] = {
-          resumedFrom: resumeId === pick.id ? pending.get(task.name)?.date : undefined,
+          resumedFrom:
+            !byCourse && resumeId === pick.id
+              ? pending.get(task.name)?.date
+              : undefined,
           id: pick.id,
           title: pick.title,
           domainLabel: pick.domainLabel,
@@ -179,23 +232,12 @@ export async function GET(req: Request) {
       // Unfinished problems from the last session go back on the card first,
       // and take slots away from new ones rather than adding to the load.
       //
-      // "Unfinished" means the day file's box is unticked — but that box never
-      // gets ticked retroactively when the problem is solved on a later day, so
-      // it must be cross-checked against the attempt log. Without this, a stale
-      // unticked line from last Friday keeps re-scheduling a problem you have
-      // since finished.
+      // Units that have since been solved were already dropped by `isResolved`
+      // when the carry-over was built, so what arrives here is genuinely still
+      // outstanding.
       const resume = (pending.get(task.name)?.units ?? [])
         .map((u) => parseProblemUnit(u)?.id)
         .filter((id): id is number => typeof id === 'number')
-        .filter((id) => {
-          const last = (leetcode.log[String(id)]?.attempts ?? []).at(-1);
-          if (!last) return true;
-          const gap = Math.round(
-            (Date.parse(`${today}T00:00:00`) - Date.parse(`${last.date}T00:00:00`)) /
-              86_400_000,
-          );
-          return gap >= MIN_REPEAT_DAYS;
-        })
         .map((id) => leetcode.bank.problems.find((p) => p.id === id))
         .filter((p): p is NonNullable<typeof p> => !!p);
 
@@ -276,6 +318,8 @@ export async function GET(req: Request) {
       }
       for (const r of recs) usedQuestions.add(r.question.id);
 
+      // Already-answered questions were dropped by `isResolved` when the
+      // carry-over was built — this is the genuinely unanswered remainder.
       const resumeQ = (pending.get(task.name)?.units ?? [])
         .map((u) => parseQuestionUnit(u)?.id)
         .filter((id): id is string => !!id)
