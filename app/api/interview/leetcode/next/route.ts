@@ -19,11 +19,11 @@ const DATA_DIR = path.dirname(
  * Body: `{ exclude: number[], count?: number }` — the problems already on
  * today's card.
  *
- * An extra problem obeys the same rule as a scheduled one: while the course is
- * unfinished it comes from the knowledge point currently being drilled, in that
- * point's order. Spreading it across topics is exactly what the course exists
- * to stop — an eleventh problem from a topic you have not passed is worth more
- * than a first problem from one you have not started.
+ * An extra problem obeys the same rules as a scheduled one: new material comes
+ * from the knowledge point currently being drilled, in that point's order, and
+ * the old-to-new ratio is judged across the **whole day** rather than per
+ * request. Judging one request on its own made every extra problem a redo —
+ * with a single slot and any flagged problem waiting, the redo always won.
  */
 export async function POST(req: Request) {
   try {
@@ -44,21 +44,30 @@ export async function POST(req: Request) {
       .flatMap((m) => m.items.map((it) => it.id));
     const topic = currentTopic(bank, log, today, courseOrder);
 
-    // A redo you flagged yourself still outranks new ground — but it has to be
-    // from the topic under study, or it would pull the day off the course.
+    // How much of today is already redo. The ratio is 1:3, so a sixth problem
+    // is new material unless the day is genuinely short on review.
     const flaggedWaiting = allProblemStates(bank, log, today).some(
-      (s) =>
-        s.redo &&
-        !s.stale &&
-        s.status === 'due' &&
-        !exclude.has(s.problem.id) &&
-        (!topic || s.problem.item === topic.itemId),
+      // Not scoped to the current topic: redo and curriculum are separate
+      // systems, so a flag left behind in 链表 is still due while you are on
+      // 二分.
+      (s) => s.redo && !s.stale && s.status === 'due' && !exclude.has(s.problem.id),
     );
+
+    // Roughly one old for every three new, measured over the day as a whole.
+    const states = allProblemStates(bank, log, today);
+    const redosSoFar = states.filter(
+      (st) =>
+        exclude.has(st.problem.id) && st.status === 'due' && !st.stale,
+    ).length;
+    const wantRedos = Math.round((exclude.size + count) / 4);
 
     const recs = recommendProblems({
       bank,
       log,
       itemId: topic?.itemId ?? null,
+      courseOrder: topic
+        ? courseOrder.slice(courseOrder.indexOf(topic.itemId))
+        : undefined,
       count,
       today,
       exclude,
@@ -73,7 +82,10 @@ export async function POST(req: Request) {
               .map((p) => p.item)
               .filter((x): x is string => !!x),
           ),
-      reviewQuota: flaggedWaiting ? 1 : 0,
+      // Same 1:3 as the daily slot — one extra problem is new material
+      // unless something flagged has actually come due, in which case it is
+      // that. Asking for more work should not mean only ever new work.
+      reviewQuota: flaggedWaiting && redosSoFar < wantRedos ? 1 : 0,
     });
 
     return NextResponse.json({

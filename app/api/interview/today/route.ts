@@ -214,6 +214,11 @@ export async function GET(req: Request) {
       .flatMap((d) => d.modules)
       .flatMap((m) => m.items.map((it) => it.id));
     const topic = currentTopic(leetcode.bank, leetcode.log, today, courseOrder);
+    // Everything from the current topic onward, so a topic whose core is all
+    // attempted-this-week spills into the next rather than yielding nothing.
+    const remaining = topic
+      ? courseOrder.slice(courseOrder.indexOf(topic.itemId))
+      : undefined;
 
     for (const task of suggestion?.tasks ?? []) {
       if (task.track !== 'leetcode') continue;
@@ -223,6 +228,7 @@ export async function GET(req: Request) {
         // One knowledge point at a time until the course is done; null after
         // that, which is the random phase.
         itemId: topic?.itemId ?? null,
+        courseOrder: remaining,
         count: Math.max(1, task.units),
         today,
         exclude: usedProblems,
