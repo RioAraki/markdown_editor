@@ -9,9 +9,11 @@ import { TaskUnit } from '@/types/interview';
  * "今天还有时间，再来一题".
  *
  * The day's plan sets a target, not a ceiling. The server decides *which*
- * problem: while the course is unfinished it comes from the knowledge point
- * under study, so an extra problem deepens the current pattern rather than
- * scattering. All this sends is what is already on the card.
+ * problem: new material follows the course, while a flagged redo comes due on
+ * its own clock and may well be from a topic you finished weeks ago. Because
+ * those two doors look identical once the problem is on the card, the reason
+ * the server gave is shown here — otherwise a DP problem appearing during
+ * 二分 week reads as a bug rather than as the redo it is.
  */
 export function AddProblem({
   units,
@@ -22,10 +24,12 @@ export function AddProblem({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [why, setWhy] = useState<string | null>(null);
 
   const pick = async () => {
     setBusy(true);
     setError(null);
+    setWhy(null);
     try {
       const ids = units
         .map((u) => parseProblemUnit(u.trailing)?.id)
@@ -36,12 +40,16 @@ export function AddProblem({
         body: JSON.stringify({ exclude: ids, count: 1 }),
       });
       if (!res.ok) throw new Error();
-      const d: { problems: { unitText: string }[] } = await res.json();
+      const d: {
+        problems: { unitText: string; title: string; reason: string }[];
+      } = await res.json();
       if (!d.problems.length) {
         setError('题库里没有更多可推荐的题了');
         return;
       }
-      onAdd(' ' + d.problems[0].unitText);
+      const p = d.problems[0];
+      setWhy(`${p.title} · ${p.reason}`);
+      onAdd(' ' + p.unitText);
     } catch {
       setError('取题失败,稍后重试');
     } finally {
@@ -66,6 +74,9 @@ export function AddProblem({
         再来一题
       </button>
       {error && <span className="text-[11px] text-red-600">{error}</span>}
+      {why && !error && (
+        <span className="text-[11px] text-stone-500">{why}</span>
+      )}
     </div>
   );
 }
