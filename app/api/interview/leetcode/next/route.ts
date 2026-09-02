@@ -7,6 +7,7 @@ import {
   currentTopic,
   problemUnitText,
   recommendProblems,
+  unlockedTopics,
 } from '@shared/interview/leetcode';
 
 const DATA_DIR = path.dirname(
@@ -44,17 +45,28 @@ export async function POST(req: Request) {
       .flatMap((m) => m.items.map((it) => it.id));
     const topic = currentTopic(bank, log, today, courseOrder);
 
+    const unlocked = unlockedTopics(bank, log, today);
+    if (topic) unlocked.add(topic.itemId);
+
     // How much of today is already redo. The ratio is 1:3, so a sixth problem
     // is new material unless the day is genuinely short on review.
-    const flaggedWaiting = allProblemStates(bank, log, today).some(
-      // Not scoped to the current topic: redo and curriculum are separate
+    const states = allProblemStates(bank, log, today);
+    const flaggedWaiting = states.some(
+      // Not scoped to the current topic — redo and curriculum are separate
       // systems, so a flag left behind in 链表 is still due while you are on
-      // 二分.
-      (s) => s.redo && !s.stale && s.status === 'due' && !exclude.has(s.problem.id),
+      // 二分 — but gated on that topic having been trained, exactly as the
+      // recommender is. Without the same gate this would reserve a redo slot
+      // for a problem the recommender then refuses to serve, and the extra
+      // problem would silently come back empty.
+      (s) =>
+        s.redo &&
+        !s.stale &&
+        s.status === 'due' &&
+        !exclude.has(s.problem.id) &&
+        unlocked.has(s.problem.item ?? ''),
     );
 
     // Roughly one old for every three new, measured over the day as a whole.
-    const states = allProblemStates(bank, log, today);
     const redosSoFar = states.filter(
       (st) =>
         exclude.has(st.problem.id) && st.status === 'due' && !st.stale,
