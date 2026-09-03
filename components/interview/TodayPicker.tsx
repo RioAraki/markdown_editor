@@ -6,6 +6,7 @@ import {
   ChevronDown,
   Clock,
   Loader2,
+  Plus,
   RefreshCw,
   Search,
 } from 'lucide-react';
@@ -24,6 +25,108 @@ import {
   TodayPlanResponse,
 } from '@/types/interview';
 
+/**
+ * 「今天还想加个时段」 — the picker, reduced to what a started day still needs.
+ *
+ * Composing a day used to be one irreversible shot: the picker vanished the
+ * moment the file existed, so a day opened in the evening with one block
+ * could never gain the rest in the morning. Everything already in the day is
+ * left out of the list, so this can only add.
+ */
+function TopUp({
+  missing,
+  chosen,
+  setChosen,
+  onAdd,
+  busy,
+  error,
+  ready,
+}: {
+  missing: BlockLite[];
+  chosen: string[];
+  setChosen: (f: (cur: string[]) => string[]) => void;
+  onAdd: () => void;
+  busy: boolean;
+  error: string | null;
+  ready: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="mb-3">
+      {!open ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="inline-flex items-center gap-1.5 text-[12px] px-2.5 py-1.5 rounded-lg border border-stone-300 bg-white text-stone-600 hover:border-indigo-400 hover:text-indigo-700 transition-colors"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          今天再加个时段
+          <span className="text-stone-400">还有 {missing.length} 个没排</span>
+        </button>
+      ) : (
+        <div className="bg-white rounded-lg border border-stone-200 p-3">
+          <div className="flex items-baseline justify-between mb-2">
+            <span className="text-[12px] font-medium text-stone-700">
+              加到今天
+            </span>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="text-[11px] text-stone-400 hover:text-stone-600"
+            >
+              收起
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-1.5 mb-2.5">
+            {missing.map((b) => {
+              const on = chosen.includes(b.id);
+              return (
+                <button
+                  key={b.id}
+                  type="button"
+                  onClick={() =>
+                    setChosen((cur) =>
+                      cur.includes(b.id)
+                        ? cur.filter((x) => x !== b.id)
+                        : [...cur, b.id],
+                    )
+                  }
+                  title={b.desc}
+                  className={`text-[11.5px] px-2 py-1 rounded border transition-colors ${
+                    on
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : 'bg-white text-stone-600 border-stone-300 hover:border-indigo-400'
+                  }`}
+                >
+                  {b.name}
+                  <span className={on ? 'ml-1 text-indigo-200' : 'ml-1 text-stone-400'}>
+                    {b.minutes}min
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onAdd}
+              disabled={busy || chosen.length === 0 || !ready}
+              className="inline-flex items-center gap-1 text-[12px] px-3 py-1.5 rounded bg-indigo-600 text-white disabled:opacity-40 hover:bg-indigo-700 transition-colors"
+            >
+              {busy && <Loader2 className="w-3 h-3 animate-spin" />}
+              加进来
+            </button>
+            {chosen.length > 0 && !ready && (
+              <span className="text-[11px] text-stone-400">正在排题…</span>
+            )}
+            {error && <span className="text-[11px] text-red-600">{error}</span>}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function TodayPicker() {
   const { days, refresh } = useInterview();
   const today = getTodayDate();
@@ -41,15 +144,21 @@ export function TodayPicker() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (todayExists) return;
     let cancelled = false;
     fetch('/api/interview/blocks')
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((d: BlocksResponse) => {
         if (cancelled) return;
         setMenu(d);
+        // Topping up starts from an empty selection: the required blocks may
+        // already be in the day, and pre-checking them would offer to add
+        // what is there.
         setChosenBlocks((cur) =>
-          cur.length ? cur : d.blocks.filter((b) => b.required).map((b) => b.id),
+          cur.length
+            ? cur
+            : todayExists
+              ? []
+              : d.blocks.filter((b) => b.required).map((b) => b.id),
         );
       })
       .catch(() => {});
@@ -61,7 +170,10 @@ export function TodayPicker() {
   // Re-plan whenever the composition changes: which problems and questions get
   // picked depends on which blocks are in the day.
   useEffect(() => {
-    if (todayExists) return;
+    if (todayExists && chosenBlocks.length === 0) {
+      setData(null);
+      return;
+    }
     let cancelled = false;
     const qs = chosenBlocks.length ? `?blocks=${chosenBlocks.join(',')}` : '';
     fetch(`/api/interview/today${qs}`)
@@ -100,9 +212,34 @@ export function TodayPicker() {
     return m;
   }, [data]);
 
-  if (todayExists || !data) return null;
+  // Blocks the day already has — offering them again would duplicate work.
+  const already = new Set(
+    (days.find((d) => d.dateStr === today)?.blocks ?? [])
+      .map((b) => ('label' in b ? b.label : ''))
+      .map((l: string) => (l.split('·')[0] ?? '').trim())
+      .filter(Boolean),
+  );
 
-  const create = async () => {
+  if (todayExists) {
+    const missing = (menu?.blocks ?? []).filter((b) => !already.has(b.name));
+    if (missing.length === 0) return null;
+    return (
+      <TopUp
+        missing={missing}
+        chosen={chosenBlocks}
+        setChosen={setChosenBlocks}
+        onAdd={() => void create(true)}
+        busy={creating}
+        error={error}
+        ready={!!data}
+      />
+    );
+  }
+
+  if (!data) return null;
+
+  const create = async (append = false) => {
+    if (!data) return;
     setCreating(true);
     setError(null);
     try {
@@ -110,6 +247,7 @@ export function TodayPicker() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          append,
           blocks: chosenBlocks,
           title: presetLabel(menu, chosenBlocks),
           items: picked,
@@ -134,9 +272,10 @@ export function TodayPicker() {
         }),
       });
       if (!res.ok) throw new Error();
+      setChosenBlocks([]);
       await refresh();
     } catch {
-      setError('创建失败,稍后重试');
+      setError(append ? '添加失败，稍后重试' : '创建失败，稍后重试');
     } finally {
       setCreating(false);
     }
@@ -291,7 +430,7 @@ export function TodayPicker() {
 
         <div className="flex items-center gap-3 pt-1">
           <button
-            onClick={create}
+            onClick={() => void create()}
             disabled={chosenBlocks.length === 0 || creating}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
           >

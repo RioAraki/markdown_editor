@@ -253,6 +253,14 @@ export interface CreateDayRequest {
   questions?: Record<string, string[]>;
   /** Task name → ordered resume-challenge ids, one per checkbox. */
   challenges?: Record<string, string[]>;
+  /**
+   * Add these blocks to a day that already exists instead of creating one.
+   *
+   * A day composed in the evening with one block could not gain the rest in
+   * the morning — the picker disappeared as soon as the file existed. This
+   * splices the new blocks in and leaves every existing line alone.
+   */
+  append?: boolean;
 }
 
 export interface MasteryEntryLite {

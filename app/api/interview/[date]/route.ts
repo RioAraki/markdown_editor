@@ -6,6 +6,7 @@ import {
 } from '@/lib/interviewFileSystem';
 import {
   ItemBinding,
+  appendBlocks,
   buildDayMarkdown,
   loadPlan,
   resolveDayPlan,
@@ -315,8 +316,19 @@ export async function POST(req: Request, context: RouteContext) {
       }
     }
 
-    const content = buildDayMarkdown(day, date, binding, unitTexts);
-    await createInterviewDay(date, content);
+    // Appending keeps the day's existing work and adds what it was missing.
+    let content: string;
+    if (body.append) {
+      const existing = await readInterviewDay(date);
+      if (existing === null) {
+        return NextResponse.json({ error: 'no such day' }, { status: 404 });
+      }
+      content = appendBlocks(existing, day, binding, unitTexts);
+      await writeInterviewDay(date, content);
+    } else {
+      content = buildDayMarkdown(day, date, binding, unitTexts);
+      await createInterviewDay(date, content);
+    }
     const response: InterviewDayContentResponse = {
       dateStr: date,
       filename: `${date}.md`,

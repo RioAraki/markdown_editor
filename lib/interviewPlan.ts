@@ -128,6 +128,73 @@ export function buildDayMarkdown(
 }
 
 /**
+ * Add task blocks to a day that already has some.
+ *
+ * Composing a day was all-or-nothing: the picker vanished the moment the
+ * file existed, so a day opened with one block in the evening could never
+ * gain the other four in the morning. The file is the record of what you
+ * actually did, so this splices in rather than rebuilding — every existing
+ * checkbox, outcome and note survives untouched.
+ */
+export function appendBlocks(
+  existing: string,
+  day: PlanDayLite,
+  binding: ItemBinding = {},
+  unitTexts: Record<string, string[]> = {},
+): string {
+  const eol = existing.includes('\r\n') ? '\r\n' : '\n';
+  const lines = existing.split(/\r?\n/);
+
+  // Merge the item markers, keeping what is already bound: a task present
+  // in both keeps its original item rather than being re-pointed.
+  const markerAt = lines.findIndex((l) => /^<!--\s*items:/.test(l.trim()));
+  const bound = new Map<string, string>();
+  if (markerAt >= 0) {
+    const inner = /^<!--\s*items:\s*(.*?)\s*-->$/.exec(lines[markerAt].trim())?.[1] ?? '';
+    for (const part of inner.split(';')) {
+      const [k, v] = part.split('=').map((x) => x.trim());
+      if (k && v) bound.set(k, v);
+    }
+  }
+  for (const [task, v] of Object.entries(binding)) {
+    if (v?.id && !bound.has(task)) bound.set(task, v.id);
+  }
+  const marker =
+    bound.size > 0
+      ? `<!-- items: ${[...bound].map(([k, v]) => `${k}=${v}`).join('; ')} -->`
+      : null;
+
+  // Only blocks not already in the file. Re-adding one would duplicate a
+  // task you may have already worked through.
+  const present = new Set(
+    lines
+      .filter((l) => l.startsWith('- '))
+      .map((l) => (l.slice(2).split('·')[0] ?? '').trim()),
+  );
+  const fresh: string[] = [];
+  for (const task of day.tasks ?? []) {
+    if (present.has(task.name)) continue;
+    const showItem = task.track !== 'leetcode';
+    fresh.push(`- ${taskLabel(task, showItem ? binding[task.name]?.title : undefined)}`);
+    const texts = unitTexts[task.name] ?? [];
+    for (let i = 0; i < Math.max(1, task.units); i++) {
+      fresh.push(texts[i] ? `  - [ ] ${texts[i]}` : '  - [ ] ');
+    }
+  }
+  if (fresh.length === 0) return existing;
+
+  if (marker && markerAt >= 0) lines[markerAt] = marker;
+  else if (marker) lines.splice(1, 0, marker);
+
+  // Before the notes block, so the file keeps reading top-to-bottom.
+  let at = lines.findIndex((l) => l.trimStart().startsWith('> 笔记'));
+  if (at < 0) at = lines.length;
+  while (at > 0 && lines[at - 1].trim() === '') at -= 1;
+  lines.splice(at, 0, ...fresh);
+  return lines.join(eol);
+}
+
+/**
  * The log line for a task: `任务名 · 具体条目 · 目标 · 时长`.
  *
  * The task name stays first because the diary renderer matches plan tasks to
