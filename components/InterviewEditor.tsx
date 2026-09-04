@@ -25,13 +25,14 @@ import { TodayPicker } from './interview/TodayPicker';
 import { UnitRecord } from './interview/UnitRecord';
 import { TaskNote } from './interview/TaskNote';
 import { AddProblem } from './interview/AddProblem';
+import { TopicDivider } from './interview/TopicDivider';
 import { QuestionRecord, QuestionMeta } from './interview/QuestionRecord';
 import { AddQuestion } from './interview/AddQuestion';
 import { PaperPanel } from './interview/PaperPanel';
 import { PaperUnit } from './interview/PaperUnit';
 import { ChallengeRecord, ChallengeMeta } from './interview/ChallengeRecord';
 import { parseQuestionUnit } from '@shared/interview/qbank';
-import { OUTCOME_LABEL } from '@shared/interview/leetcode';
+import { OUTCOME_LABEL, parseProblemUnit } from '@shared/interview/leetcode';
 import type { AttemptEntry } from './interview/AttemptHistory';
 import type { Resume } from '@shared/interview/resume';
 import type { StoryAnswer, StoryBank } from '@shared/interview/stories';
@@ -97,6 +98,8 @@ export function InterviewEditor() {
   // problemId → 中文专题名. Only used to reveal what an already-attempted
   // problem was testing; never shown before an outcome is recorded.
   const [problemTopic, setProblemTopic] = useState<Record<number, string>>({});
+  /** itemId → 中文专题名, for naming the point a divider closes. */
+  const [topicName, setTopicName] = useState<Record<string, string>>({});
   const [problemItem, setProblemItem] = useState<Record<number, string>>({});
   /** problemId → 历次尝试，供卡片展示「以前写过什么」。 */
   const [attempts, setAttempts] = useState<Record<number, AttemptEntry[]>>({});
@@ -220,6 +223,7 @@ export function InterviewEditor() {
         }
         setProblemTopic(m);
         setProblemItem(items);
+        setTopicName(d.topics ?? {});
 
         const hist: Record<number, AttemptEntry[]> = {};
         for (const [pid, rec] of Object.entries(d.log ?? {})) {
@@ -377,6 +381,7 @@ export function InterviewEditor() {
                 isToday={shownDay.dateStr === today}
                 problemTopic={problemTopic}
                 problemItem={problemItem}
+                topicName={topicName}
                 attempts={attempts}
                 qhistory={qhistory}
                 paperIds={paperIds}
@@ -406,6 +411,7 @@ function DayCard({
   isToday,
   problemTopic,
   problemItem,
+  topicName,
   attempts,
   qhistory,
   paperIds,
@@ -425,6 +431,7 @@ function DayCard({
   isToday: boolean;
   problemTopic: Record<number, string>;
   problemItem: Record<number, string>;
+  topicName: Record<string, string>;
   attempts: Record<number, AttemptEntry[]>;
   qhistory: Record<string, AttemptEntry[]>;
   paperIds: string[];
@@ -496,6 +503,7 @@ function DayCard({
               blockIdx={blockIdx}
               problemTopic={problemTopic}
               problemItem={problemItem}
+              topicName={topicName}
               attempts={attempts}
               qhistory={qhistory}
               paperIds={paperIds}
@@ -576,6 +584,7 @@ function BlockRow({
   blockIdx,
   problemTopic,
   problemItem,
+  topicName,
   attempts,
   qhistory,
   paperIds,
@@ -599,6 +608,7 @@ function BlockRow({
   blockIdx: number;
   problemTopic: Record<number, string>;
   problemItem: Record<number, string>;
+  topicName: Record<string, string>;
   attempts: Record<number, AttemptEntry[]>;
   qhistory: Record<string, AttemptEntry[]>;
   paperIds: string[];
@@ -708,6 +718,17 @@ function BlockRow({
             />
           )}
           {!paperId && block.units.map((unit, unitIdx) => {
+            // The course crosses from one knowledge point to the next in the
+            // middle of a day, and problem titles give nothing away — which is
+            // deliberate, and also why the crossing went unnoticed. Mark it.
+            const itemOf = (u?: { trailing: string }) => {
+              const id = u ? parseProblemUnit(u.trailing)?.id : undefined;
+              return id === undefined ? undefined : problemItem[id];
+            };
+            const mine = itemOf(unit);
+            const prev = itemOf(block.units[unitIdx - 1]);
+            const crossed = !!mine && !!prev && mine !== prev;
+
             // `key` stays out of this object — React requires it directly on
             // the element, and spreading it there is an error.
             const common = {
