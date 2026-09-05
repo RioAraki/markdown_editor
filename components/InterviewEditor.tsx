@@ -26,6 +26,7 @@ import { UnitRecord } from './interview/UnitRecord';
 import { TaskNote } from './interview/TaskNote';
 import { AddProblem } from './interview/AddProblem';
 import { TopicDivider } from './interview/TopicDivider';
+import { ResumeSnippet } from './interview/ResumeSnippet';
 import { QuestionRecord, QuestionMeta } from './interview/QuestionRecord';
 import { AddQuestion } from './interview/AddQuestion';
 import { PaperPanel } from './interview/PaperPanel';
@@ -36,6 +37,7 @@ import { OUTCOME_LABEL, parseProblemUnit } from '@shared/interview/leetcode';
 import type { AttemptEntry } from './interview/AttemptHistory';
 import type { Resume } from '@shared/interview/resume';
 import type { StoryAnswer, StoryBank } from '@shared/interview/stories';
+import { parseStoryUnit } from '@shared/interview/stories';
 import { usePullToRefresh } from './training/usePullToRefresh';
 
 const PTR_THRESHOLD = 60;
@@ -510,6 +512,7 @@ function DayCard({
               onOpenPaper={onOpenPaper}
               cmeta={cmeta}
               canswers={canswers}
+              resume={resume}
               itemsByTask={day.itemsByTask}
               qmeta={qmeta}
               qanswers={qanswers}
@@ -678,6 +681,12 @@ function BlockRow({
     const boundItem = itemsByTask[name];
     const paperId =
       boundItem && paperIds.includes(boundItem) ? boundItem : undefined;
+    // Every question in a resume cluster attacks the same line, so the anchor
+    // is a property of the block rather than of each card.
+    const storyAnchor = block.units
+      .map((u) => parseStoryUnit(u.trailing)?.id)
+      .map((id) => (id ? cmeta[id]?.resumeAnchor : undefined))
+      .find(Boolean);
     return (
       <div className="py-3">
         <div className="flex items-baseline justify-between gap-3 mb-2">
@@ -707,6 +716,10 @@ function BlockRow({
             {doneCount}/{total}
           </span>
         </div>
+        {/* One resume line's worth of attack, with the bullet pinned above
+            it: 「这个数怎么统计的」 is unanswerable without the claim it is
+            aimed at in view. */}
+        {storyAnchor && <ResumeSnippet resume={resume} anchor={storyAnchor} />}
         <div className="space-y-1.5">
           {paperId && (
             <PaperUnit

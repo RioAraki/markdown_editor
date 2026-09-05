@@ -22,7 +22,7 @@ import { recommendQuestions } from '@shared/interview/qbank';
 import { carryOver, dayFromBlocks } from '@shared/interview/core';
 import {
   parseStoryUnit,
-  pickQuestions as pickStoryQuestions,
+  clusterQuestions as clusterStoryQuestions,
   questionUnitText as storyUnitText,
 } from '@shared/interview/stories';
 import {
@@ -363,11 +363,11 @@ export async function GET(req: Request) {
     const suggestedStories: TodayPlanResponse['suggestedStories'] = {};
     for (const task of suggestion?.tasks ?? []) {
       if (!(task.pool ?? []).some((x) => x.startsWith('rs-'))) continue;
-      const picks = pickStoryQuestions(
-        stories.bank,
-        stories.answers,
-        Math.max(1, task.units),
-      );
+      // The whole resume line, not a slice of it. `task.units` stays as the
+      // block's stated target — how much of it you plan to get through — but
+      // the card shows the line entire, because the questions only make sense
+      // against the bullet they all attack.
+      const picks = clusterStoryQuestions(stories.bank, stories.answers);
       if (picks.length === 0) continue;
 
       // Bind the slot to the cluster the questions came from, so the day log

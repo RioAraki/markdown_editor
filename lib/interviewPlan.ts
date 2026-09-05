@@ -116,7 +116,10 @@ export function buildDayMarkdown(
       `- ${taskLabel(task, showItem ? binding[task.name]?.title : undefined)}`,
     );
     const texts = unitTexts[task.name] ?? [];
-    const n = Math.max(1, task.units);
+    // `units` is the target, not a cap. A 简历深挖 slot carries a whole resume
+    // line — nine or ten questions — because they are one piece of work; the
+    // stated 4 问 is how much of it you expect to finish tonight.
+    const n = Math.max(1, task.units, texts.length);
     for (let i = 0; i < n; i++) {
       lines.push(texts[i] ? `  - [ ] ${texts[i]}` : '  - [ ] ');
     }
@@ -177,7 +180,7 @@ export function appendBlocks(
     const showItem = task.track !== 'leetcode';
     fresh.push(`- ${taskLabel(task, showItem ? binding[task.name]?.title : undefined)}`);
     const texts = unitTexts[task.name] ?? [];
-    for (let i = 0; i < Math.max(1, task.units); i++) {
+    for (let i = 0; i < Math.max(1, task.units, texts.length); i++) {
       fresh.push(texts[i] ? `  - [ ] ${texts[i]}` : '  - [ ] ');
     }
   }
