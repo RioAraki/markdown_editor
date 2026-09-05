@@ -11,6 +11,7 @@ import {
 } from '@shared/interview/stories';
 import { UnitStatus } from '@/types/interview';
 import { AttemptHistory } from './AttemptHistory';
+import { FollowUpChain } from './FollowUpChain';
 
 /**
  * One resume challenge in a day's log.
@@ -162,6 +163,12 @@ export function ChallengeRecord({
               </span>
             )}
             <span className="text-stone-400">{STATUS_LABEL[st]}</span>
+            {(rec?.followUps?.length ?? 0) > 0 && (
+              <span className="ml-1 text-indigo-600">
+                · 追问 {rec?.followUps?.filter((f) => !f.answer).length ?? 0}/
+                {rec?.followUps?.length}
+              </span>
+            )}
             {rec?.gaps?.[0] && (
               <span className="text-amber-700"> · {rec.gaps[0]}</span>
             )}
@@ -245,6 +252,14 @@ export function ChallengeRecord({
             />
           </div>
 
+          <FollowUpChain
+            items={rec?.followUps ?? []}
+            onSave={(followUpId, followUpAnswer) =>
+              write({ followUpId, followUpAnswer })
+            }
+            onStuck={(followUpId, stuck) => write({ followUpId, stuck })}
+          />
+
           <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
@@ -269,7 +284,7 @@ export function ChallengeRecord({
               {rec?.dropped ? '已弃用 · 恢复' : '这题没意义'}
             </button>
             <span className="text-[10px] text-stone-400">
-              攒几条后跟 Claude 说「批一下简历深挖」
+              答完跟 Claude 说「追问一下」或「批一下简历深挖」
             </span>
           </div>
         </div>

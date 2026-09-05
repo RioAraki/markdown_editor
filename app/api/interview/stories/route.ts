@@ -66,6 +66,10 @@ export async function PUT(req: Request) {
       grade?: string | null;
       gaps?: string[];
       dropped?: boolean;
+      /** Answering or flagging one follow-up rather than the question. */
+      followUpId?: string;
+      followUpAnswer?: string;
+      stuck?: boolean;
     } = await req.json();
 
     if (!body.storyId || !/^[\w-]+$/.test(body.storyId) || !body.questionId) {
@@ -139,6 +143,26 @@ export async function PUT(req: Request) {
       next.gaps = body.gaps.filter(Boolean).length ? body.gaps.filter(Boolean) : undefined;
     }
     if (typeof body.dropped === 'boolean') next.dropped = body.dropped || undefined;
+
+    // Follow-ups are authored in conversation and written straight into the
+    // file; the app only ever fills in your side of the exchange. So this
+    // updates an existing entry and never creates one — a follow-up id the
+    // file does not know about is a bug, not a new question.
+    if (body.followUpId) {
+      const list = next.followUps ?? [];
+      const i = list.findIndex((f) => f.id === body.followUpId);
+      if (i < 0) {
+        return NextResponse.json({ error: 'unknown follow-up' }, { status: 404 });
+      }
+      const f = { ...list[i] };
+      if (typeof body.followUpAnswer === 'string') {
+        const t = body.followUpAnswer.trim();
+        f.answer = t || undefined;
+        f.answerDate = format(new Date(), 'yyyy-MM-dd');
+      }
+      if (typeof body.stuck === 'boolean') f.stuck = body.stuck || undefined;
+      next.followUps = [...list.slice(0, i), f, ...list.slice(i + 1)];
+    }
 
     doc.answers[body.questionId] = next;
 
