@@ -26,7 +26,7 @@ import {
   questionUnitText as storyUnitText,
 } from '@shared/interview/stories';
 import {
-  MIN_REPEAT_DAYS,
+  allProblemStates,
   currentTopic,
   recommendProblems,
 } from '@shared/interview/leetcode';
@@ -93,11 +93,27 @@ export async function GET(req: Request) {
      * through to `false`: there the checkbox really is the only truth, so an
      * unticked box correctly means still to do.
      */
+    const lcStates = new Map(
+      allProblemStates(leetcode.bank, leetcode.log, today).map((st) => [
+        st.problem.id,
+        st,
+      ]),
+    );
+
     const isResolved = (unit: string): boolean => {
       const p = parseProblemUnit(unit);
       if (p) {
-        const last = (leetcode.log[String(p.id)]?.attempts ?? []).at(-1);
-        return !!last && daysSince(last.date) < MIN_REPEAT_DAYS;
+        const st = lcStates.get(p.id);
+        if (!st || st.attempts.length === 0 || st.stale) return false;
+        // Ask the schedule, not the calendar. This used to ask whether the
+        // problem had been attempted inside `MIN_REPEAT_DAYS` — but that is
+        // the floor on *re-serving* a problem, not a statement about whether
+        // the work is done. #930 was solved cleanly twice and is not due
+        // again until October; on the seventh day after the last solve the
+        // window lapsed and a stale unticked box from 八月 dragged it back.
+        // 'scheduled' means done and waiting; 'due' means it genuinely wants
+        // attention, and then the review pool will offer it anyway.
+        return st.status === 'scheduled' || st.status === 'retired';
       }
       const q = parseQuestionUnit(unit);
       if (q) {
