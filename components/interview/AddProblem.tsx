@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Loader2, Plus } from 'lucide-react';
 import { parseProblemUnit } from '@shared/interview/leetcode';
 import { TaskUnit } from '@/types/interview';
+import { useInterview } from '@/contexts/InterviewContext';
 
 /**
  * "今天还有时间，再来一题".
@@ -17,11 +18,14 @@ import { TaskUnit } from '@/types/interview';
  */
 export function AddProblem({
   units,
+  dateStr,
   onAdd,
 }: {
   units: TaskUnit[];
+  dateStr: string;
   onAdd: (trailing: string) => void;
 }) {
+  const { days } = useInterview();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [why, setWhy] = useState<string | null>(null);
@@ -31,20 +35,24 @@ export function AddProblem({
     setError(null);
     setWhy(null);
     try {
-      const ids = units
+      const day = days.find((d) => d.dateStr === dateStr);
+      const allUnits = day
+        ? day.blocks.flatMap((b) => b.kind === 'task-units' ? b.units : [])
+        : units;
+      const ids = allUnits
         .map((u) => parseProblemUnit(u.trailing)?.id)
         .filter((n): n is number => typeof n === 'number');
       const res = await fetch('/api/interview/leetcode/next', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ exclude: ids, count: 1 }),
+        body: JSON.stringify({ date: dateStr, exclude: ids, count: 1 }),
       });
       if (!res.ok) throw new Error();
       const d: {
         problems: { unitText: string; title: string; reason: string }[];
       } = await res.json();
       if (!d.problems.length) {
-        setError('题库里没有更多可推荐的题了');
+        setError('暂时没有符合两新一旧规则的题目可追加');
         return;
       }
       const p = d.problems[0];
@@ -64,7 +72,7 @@ export function AddProblem({
         onClick={pick}
         disabled={busy}
         className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-50 transition-colors"
-        title="按课程再加一题 —— 还在攻当前知识点，不会跳到别的专题"
+        title="接着今天的两新一旧顺序加题；老题只选已标记待重做的题"
       >
         {busy ? (
           <Loader2 className="w-3 h-3 animate-spin" />

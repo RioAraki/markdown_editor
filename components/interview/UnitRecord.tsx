@@ -8,7 +8,6 @@ import {
   OUTCOME_ORDER,
   Outcome,
   REDO_LABEL,
-  nextInterval,
   parseProblemRecord,
   redoHintIn,
 } from '@shared/interview/leetcode';
@@ -303,10 +302,7 @@ export function UnitRecord({
                       type="button"
                       onClick={() => pickOutcome(o)}
                       disabled={saving}
-                      title={`${OUTCOME_HINT[o]} · 记录后约 ${nextInterval(
-                        undefined,
-                        o,
-                      )} 天再安排复习`}
+                      title={`${OUTCOME_HINT[o]} · 仅记录结果，标记待重做后才会再次推荐`}
                       className={`text-[11px] px-2 py-1 rounded border transition-colors disabled:opacity-50 ${
                         active ? OUTCOME_ACTIVE[o] : OUTCOME_TONE[o]
                       }`}
@@ -324,8 +320,8 @@ export function UnitRecord({
                   disabled={saving}
                   title={
                     parts.redo
-                      ? '已标记待重做，会插到复习队列最前面。再点一下取消'
-                      : '标记这题要重做 —— 一周内回到推荐里，理由用你写的备注'
+                      ? '已标记待重做，间隔至少 7 天后按两新一旧安排。再点一下取消'
+                      : '标记这题要重做，间隔至少 7 天后进入两新一旧的老题队列'
                   }
                   className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border transition-colors disabled:opacity-50 ${
                     parts.redo
@@ -408,13 +404,8 @@ export function UnitRecord({
                   )}
                   <p className="text-[10px] text-stone-400">
                     {parts.redo
-                      ? '已标记待重做 · 一周内回到推荐里，并排在复习队列最前'
-                      : parts.outcome === 'clean'
-                        ? '连续两次完美且间隔超过 90 天才退出轮转'
-                        : `约 ${nextInterval(undefined, parts.outcome)} 天后会再出现在推荐里`}
-                    {!parts.redo &&
-                      parts.outcome === 'suboptimal' &&
-                      ' · 掌握有偏差，进度条按未掌握算'}
+                      ? '已标记待重做 · 间隔至少 7 天后，按两新一旧安排'
+                      : '未标记待重做，不会因为结果评分再次推荐'}
                   </p>
                 </div>
               ) : (

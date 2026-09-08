@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Interview Prep · 代码与选题逻辑</title>
+<style>
+:root{color-scheme:light;--bg:#fafaf9;--card:white;--fg:#292524;--muted:#78716c;--line:#e7e5e4;--accent:#4f46e5}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.7 Arial,"Microsoft YaHei",sans-serif}main{max-width:1160px;margin:auto;padding:42px 28px 80px}h1{font-size:34px;line-height:1.25;margin:12px 0}h2{font-size:23px;margin:0 0 18px}h3{font-size:17px;margin:0 0 8px}p{margin:8px 0}a{color:var(--accent)}small,.muted{color:var(--muted)}nav{display:flex;flex-wrap:wrap;gap:10px;margin:24px 0}nav a,.pill{padding:5px 12px;border:1px solid var(--line);background:var(--card);border-radius:7px;text-decoration:none}section{margin:28px 0;padding:24px;border:1px solid var(--line);border-radius:12px;background:var(--card);scroll-margin-top:20px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.grid>*{min-width:0}.card{padding:18px;background:var(--bg);border:1px solid var(--line);border-radius:8px}.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:25px}.stats strong{display:block;color:var(--accent);font-size:28px}.callout{border-left:4px solid var(--accent);padding:10px 16px;background:#eef2ff;margin:18px 0}.source{font-size:12px;color:var(--muted);overflow-wrap:anywhere}.table-wrap{overflow:auto}table{border-collapse:collapse;width:100%;font-size:14px}th,td{border-bottom:1px solid var(--line);padding:12px;text-align:left;vertical-align:top}th{background:var(--bg)}code{font:12px/1.6 Consolas,monospace;overflow-wrap:anywhere}td,p,li{overflow-wrap:anywhere}li{margin:8px 0}summary{cursor:pointer;font-weight:600;padding:8px 0}img,svg{max-width:100%;height:auto}img{border:1px solid var(--line);border-radius:8px}.mermaid{min-height:180px}.tag{font-size:12px;color:var(--accent);font-weight:bold}.snapshot-list{columns:2;padding-left:22px}@media(max-width:720px){main{padding:22px 14px}.grid,.stats{grid-template-columns:minmax(0,1fr)}h1{font-size:27px}section{padding:18px}.snapshot-list{columns:1}}
+</style></head><body><main>
+<span class="tag">代码梳理 · 2026-09-08 · 为下一轮修改建立上下文</span>
+<h1>每天选准备内容，系统排到具体题目。</h1>
+<p class="muted">已读取前端、Next.js API、D:\diary 共享核心和实际数据，并核对运行中的只读接口。本轮未修改业务代码。</p>
+<div class="stats"><div class="card"><strong>4</strong>日常 Tab</div><div class="card"><strong>14</strong>可选准备时段</div><div class="card"><strong>466</strong>本地 LeetCode 题目</div><div class="card"><strong>6 周</strong>当前准备计划</div></div>
+<nav><a href="#product">四个 Tab</a><a href="#flow">前后端链路</a><a href="#selection">每日选题</a><a href="#storage">编辑与保存</a><a href="#entry">修改入口</a></nav>
+<section id="product"><h2>四个 Tab 已经存在</h2><div class="grid"><div class="card"><h3>Diary / Archive</h3><p>日记与归档文章使用 Markdown 编辑 + 预览。数据分别位于 <code>D:\diary\data\diary</code> 和 <code>D:\diary\data\archive</code>。</p></div><div class="card"><h3>Training / Prep</h3><p>Training 把训练计划变成动作、组数和训练记录；Prep 把面试计划变成时段、题目、作答与复盘。分别写入 training/log 和 interview/log。</p></div></div>
+<p>Prep 的三栏是：历史日历、所选日期的任务编辑器、准备进度总览。内部 Tab key 是 <code>interview</code>，展开导航显示 Prep，折叠导航显示 Interview。</p><p class="source">D:\markdown_editor\app\page.tsx · components\DiaryList.tsx · components\InterviewEditor.tsx · components\interview\OverviewPane.tsx</p>
+<details><summary>查看实际界面截图</summary><img src="prep-current.png" alt="本地编辑器的 Interview Prep 页面"><p class="muted">本地现有页面截图；用于说明界面结构，并非重新设计的 mockup。</p></details></section>
+<section id="flow"><h2>两个项目，共用数据与算法</h2><div class="mermaid">
+flowchart TD
+  A["D:/diary/data/interview<br/>计划、题库、每日记录、答案"] --> B["D:/diary/shared/interview<br/>load + core + leetcode + qbank"]
+  B --> C["Next.js API<br/>D:/markdown_editor/app/api/interview"]
+  C --> D["TodayPicker<br/>选择今天做哪些时段，预览具体题目"]
+  D --> E["POST /api/interview/日期<br/>创建或追加每日 Markdown"]
+  E --> A
+  C --> F["InterviewContext + InterviewEditor<br/>解析任务、记录结果、自动保存"]
+  F --> G["PUT 每日记录 / 题目结果 / 答案"]
+  G --> A
+  B --> H["两边复用的进度计算与 OverviewPanel"]
+</div><div class="callout"><strong>数据文件与共享代码是两个独立依赖。</strong>编辑器通过 <code>@shared/* → ../diary/shared/*</code> 直接编译共享代码；数据路径默认指向 D:\diary，部分可用环境变量覆盖。因此仅复制 markdown_editor 并不能得到完整独立应用。</div>
+<p class="source">D:\markdown_editor\tsconfig.json · next.config.ts · D:\diary\shared\interview\load.ts</p>
+<h3>一天如何被编排</h3><ol><li><strong>选择时段：</strong>TodayPicker 从 /blocks 读取目录；required 时段默认选中，也支持 preset 组合。当前默认刷题是 6 题 / 110min。</li><li><strong>计算建议：</strong>/today?blocks=… 为这些时段绑定知识点、具体题目或简历追问。没有自选时，退回指定日期覆盖或「阶段 × 星期」模板。</li><li><strong>确认开始：</strong>前端把 block IDs、item IDs 和题目 IDs 发给 /[date]；服务器将题号和标题编进每日文件。这一步才把建议落成任务。</li><li><strong>执行与追加：</strong>已有日程按文件展示；重新请求推荐不会重排已经存在的记录。另有“再加时段”和“再来一题”入口。</li></ol></section>
+<section id="selection"><h2>LeetCode：课程覆盖与复习分别调度</h2><p>每日路径读取现有 <code>leetcode.json</code>，执行确定性的筛选和排序；没有在每日选题接口中调用 LLM 或在线生成题目。当前题库 466 题，其中课程题 200 题，基础题 152 题，分布在 20 个知识点。</p>
+<div class="grid"><div class="card"><h3>课程线：先覆盖模式</h3><p>按 inventory 的知识点顺序寻找第一个未通过的专题。专题全部基础题在最近 180 天内有尝试记录，就可以推进；不要求每道题独立做对。</p><p>新题限定在课程中带 seq 的 core 题，按 seq 排序。进阶题不阻塞推进，课程走完后进入跨专题混合选择；代码里的 random 模式也仍是排序选题，并未随机抽样。</p></div><div class="card"><h3>复习线：按结果回访</h3><p>复习可以来自其他已训练专题。专题至少一半基础题有近期尝试才解锁复习，当前在学专题直接解锁。</p><p>候选先排除近 7 天已尝试、已退休和显式排除的题。复习池要求已到期、历史未过期；排序是重做标记优先，再看“磕磕绊绊”、非最优解，最后比较逾期天数。</p></div></div>
+<ol><li><strong>先取配额内的复习：</strong>默认配额为 round(题数 / 4)。6 题对应 2 个复习名额，有合格候选才填满。</li><li><strong>填当前专题的新题：</strong>从未尝试或最后尝试已满 180 天的题进入新题池。</li><li><strong>当前新题不足：</strong>先用更多合格复习题补齐，此时可超过初始复习配额；仍不足才向后续专题取基础题。</li><li><strong>外层再接回未做项：</strong>/today 回看近 21 天，按任务名找最早仍有未完成内容的一天；用独立历史过滤已经解决的题。遗留题放在前面，再保留剩余推荐，因此这是选题算法外的额外一层。</li></ol>
+<div class="table-wrap"><table><thead><tr><th>首次结果</th><th>实际首次间隔</th><th>后续规则</th></tr></thead><tbody><tr><td>没做出来 / 看了答案 / 磕磕绊绊</td><td>7 天</td><td>前两者重置至 7 天；磕磕绊绊约 ×1.2</td></tr><tr><td>非最优解</td><td>12 天</td><td>约 ×1.6，上限 180 天</td></tr><tr><td>比较完美</td><td>21 天</td><td>约 ×2.5，上限 180 天</td></tr><tr><td>标记待重做</td><td>最后尝试日期 + 7 天</td><td>压缩间隔；标记期间不会退休</td></tr></tbody></table></div><p class="muted">退休条件是最后两次均 clean 且计算出的间隔至少 90 天；并非只要做对两次就退休。180 天过期判断用于课程覆盖和新题池，但推荐器仍先过滤 retired。</p>
+<p class="source">D:\diary\shared\interview\leetcode.ts：courseProgress / currentTopic / unlockedTopics / recommendProblems / nextInterval；D:\markdown_editor\app\api\interview\today\route.ts</p>
+<details open><summary>本轮只读核对：重新计算 2026-09-08 的 6 题建议</summary><p>课程位置为二叉树，基础题已尝试 3/8。纯函数执行与运行中 GET /today?blocks=leetcode 得到相同题号序列：</p><ul class="snapshot-list"><li>复习 #1372 二叉树中的最长交错路径</li><li>复习 #974 和可被 K 整除的子数组</li><li>新题 #103 二叉树的锯齿形层序遍历</li><li>新题 #105 从前序与中序遍历序列构造二叉树</li><li>新题 #129 求根节点到叶节点数字之和</li><li>新题 #236 二叉树的最近公共祖先</li></ul><p class="muted">这是读取时的重新计算结果，不是今日文件的原始生成快照；随着历史更新会变化。今天已有 11 道刷题条目，6 是目标而非上限。</p></details>
+<details><summary>“再来一题”与每日批量选择的区别</summary><p>AddProblem 把当前任务内已有题号作为 exclude 发给 /leetcode/next。后端仍按当前课程取题，并以排除题集合估算当日新旧比例；只有到期的标记重做题在等待、且估算复习量不足时，才主动预留 1 个复习名额。候选不足时仍适用推荐器的复习补齐规则。接口最多一次取 5 题，当前 UI 每次取 1 题。</p><p>这个接口使用服务器的今天，未接收所编辑日期；“全日比例”实际依赖调用方传入的当前任务题号集合。</p></details></section>
+<section id="storage"><h2>编辑并不只是在打勾</h2><div class="table-wrap"><table><thead><tr><th>内容</th><th>D:\diary\data\interview 下的文件</th><th>作用</th></tr></thead><tbody><tr><td>准备框架与范围</td><td>plan.json / inventory.json</td><td>时段、目标、阶段、知识点顺序和说明</td></tr><tr><td>某天做什么、做得怎样</td><td>log/YYYY-MM-DD.md</td><td>任务名、items 标记、题号、结果标签、重做标记和短笔记</td></tr><tr><td>LeetCode 历史</td><td>leetcode.json / leetcode-log.json</td><td>静态题库与按题号、日期记录的尝试；派生课程位置和复习时间</td></tr><tr><td>Agent / Python / 后端问答</td><td>*-qbank.json + qbank/题目ID.md</td><td>各题库按 seq 推进；独立 Markdown 保存回答和重做状态。Agent 使用 agent-qbank-v2.json</td></tr><tr><td>简历、论文、专题沉淀</td><td>resume.json / stories.json / stories/*.md / papers/*.md / topics/*.md</td><td>简历追问按簇推进；论文未标记 finished 会继续推荐；专题笔记跨天复用</td></tr></tbody></table></div>
+<ol><li><strong>解析：</strong>interviewParser 将 Markdown 转成任务块、单题状态和笔记，保留其他文本及 items 绑定；序列化后仍是 Markdown。</li><li><strong>结果记录：</strong>UnitRecord 选择结果时立即 PUT /leetcode，并更新页面中的单题文本；专题名在记录结果后揭示。</li><li><strong>自动保存：</strong>InterviewContext 等待 1.5 秒，把改过的日期整体 PUT 回磁盘。baseContent 用于检测外部编辑冲突，服务端可返回 409。</li><li><strong>校准历史：</strong>每日文件保存后重新提取该日尝试，校准 leetcode-log.json；题库回答正文归独立文件，每日文件只校准重做标记及短原因。</li><li><strong>刷新总览：</strong>页面内每日编辑会覆盖总览的日志快照；题目结果、题库、简历及专题更新通过事件重新读取数据。</li></ol>
+<div class="callout">“今天做了多少”与“掌握多少”口径不同：日历的计数把 partial 也算作尝试；课程推进看基础题覆盖；专题掌握统计看近期最后结果是否 clean / suboptimal 且未标记重做。</div>
+<p>还有一个手动 /leetcode/sync-repo 接口，扫描 <code>D:\github\leetcode2020</code> 中的 redo 文件名，给已有历史加标记。它不会自动清除标记，也不是每日题库生成器。当前扫描范围内未找到构建整份 LeetCode 题库的脚本。</p></section>
+<section id="entry"><h2>下一轮改动可以从这些入口落下去</h2><div class="grid"><div class="card"><h3>改每日准备内容与份量</h3><p><code>D:\diary\data\interview\plan.json</code> 的 blocks / presets；交互入口在 <code>D:\markdown_editor\components\interview\TodayPicker.tsx</code>。</p></div><div class="card"><h3>改题目顺序、复习与过关</h3><p>课程与基础/进阶归属在 inventory.json / leetcode.json；算法在 <code>D:\diary\shared\interview\leetcode.ts</code>，编排外层在 /today，追加入口在 /leetcode/next。</p></div><div class="card"><h3>改做题后的记录体验</h3><p><code>D:\markdown_editor\components\interview\UnitRecord.tsx</code>、InterviewContext、interviewParser，以及 /leetcode 与 /[date] 两条保存路径。</p></div><div class="card"><h3>改总览与统计口径</h3><p><code>D:\markdown_editor\components\interview\OverviewPane.tsx</code> 与 <code>D:\diary\shared\interview\core.ts</code>、leetcode.ts 和共享 ui/OverviewPanel。</p></div></div>
+<details><summary>已注意到的现状差异，留作后续修改上下文</summary><ul><li>侧栏写 12-week，plan.json 实为 2026-08-27 至 2026-10-08 的 6 周计划。</li><li>inventory 中部分“验收标准”文字仍写独立解题门槛，实际 courseProgress 仅用近期基础题尝试覆盖推进；旧注释也有类似漂移。</li><li>TodayPicker 的 TopUp 分支在 create 常量初始化之前返回，回调却引用 create；这是静态阅读发现的追加时段疑点，本轮未提交真实追加来验证。</li><li>保存冲突分支更新了磁盘版本后，saveNow 尾部仍统一更新 saved 快照；同样值得在修改保存链路时专项检查。本轮未模拟冲突或写入测试。</li></ul></details>
+<p class="muted">验证范围：代码阅读、真实文件核对、只读推荐 GET、共享纯函数执行、现有 UI 浏览。未提交创建、保存、同步仓库或其他修改请求。页面沿用现有 Prep 的 stone / indigo 配色和卡片风格。</p></section>
+</main><script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.15.0/dist/mermaid.esm.min.mjs";
+
+  // Render Mermaid in a theme that matches the artifact page, and re-render when
+  // the viewer flips the page theme - Mermaid never restyles an already-rendered
+  // SVG on its own, so a fixed theme clashes in either light or dark mode.
+  const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+  // Normalize any CSS color the browser produces (rgb, oklch, hsl, named, ...)
+  // to [r, g, b, a] bytes via a 1x1 canvas, so parsing never breaks on modern
+  // color syntaxes like DaisyUI's oklch() values.
+  const paint = document.createElement("canvas").getContext("2d");
+  function toRgba(color) {
+    paint.clearRect(0, 0, 1, 1);
+    paint.fillStyle = "#000";
+    paint.fillStyle = color;
+    paint.fillRect(0, 0, 1, 1);
+    return paint.getImageData(0, 0, 1, 1).data;
+  }
+
+  function compositeRgba(foreground, background) {
+    const foregroundAlpha = foreground[3] / 255;
+    const backgroundAlpha = background[3] / 255;
+    const alpha = foregroundAlpha + backgroundAlpha * (1 - foregroundAlpha);
+    if (alpha === 0) return [0, 0, 0, 0];
+    return [
+      (foreground[0] * foregroundAlpha + background[0] * backgroundAlpha * (1 - foregroundAlpha)) / alpha,
+      (foreground[1] * foregroundAlpha + background[1] * backgroundAlpha * (1 - foregroundAlpha)) / alpha,
+      (foreground[2] * foregroundAlpha + background[2] * backgroundAlpha * (1 - foregroundAlpha)) / alpha,
+      alpha * 255,
+    ];
+  }
+
+  function pageIsDark() {
+    // Trust the actually-rendered page background so this works with any theming
+    // mechanism: prefers-color-scheme, a data-theme attribute, or plain CSS.
+    const root = document.documentElement;
+    const rootBackground = toRgba(getComputedStyle(root).backgroundColor);
+    const bodyBackground = document.body ? toRgba(getComputedStyle(document.body).backgroundColor) : [0, 0, 0, 0];
+    const [r, g, b, a] = compositeRgba(bodyBackground, rootBackground);
+    if (a > 0) {
+      return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 < 0.5;
+    }
+    const colorScheme = getComputedStyle(root).colorScheme;
+    if (colorScheme.includes("dark") && !colorScheme.includes("light")) return true;
+    if (colorScheme.includes("light") && !colorScheme.includes("dark")) return false;
+    return darkQuery.matches;
+  }
+
+  const diagrams = [...document.querySelectorAll(".mermaid")].map((el) => ({ el, src: el.textContent }));
+  let applied;
+  let rendering = false;
+  let queued = false;
+  function queueRender() {
+    queued = true;
+    if (rendering) return;
+    void render();
+  }
+  async function render() {
+    rendering = true;
+    try {
+      while (queued) {
+        queued = false;
+        const theme = pageIsDark() ? "dark" : "default";
+        if (theme === applied) continue;
+        mermaid.initialize({ startOnLoad: false, theme, securityLevel: "strict" });
+        for (const { el, src } of diagrams) {
+          el.removeAttribute("data-processed");
+          el.textContent = src;
+        }
+        try {
+          await mermaid.run({ nodes: diagrams.map((d) => d.el) });
+        } catch (error) {
+          console.error("Mermaid diagram render failed:", error);
+          return;
+        }
+        applied = theme;
+      }
+    } finally {
+      rendering = false;
+      if (queued) queueRender();
+    }
+  }
+
+  // First render once stylesheets are applied (no wrong-theme flash), then keep
+  // the diagrams in sync with page-theme toggles and OS light/dark changes.
+  if (document.readyState === "complete") queueRender();
+  else window.addEventListener("load", queueRender, { once: true });
+  const themeObserver = new MutationObserver(queueRender);
+  for (const el of [document.documentElement, document.body]) {
+    if (!el) continue;
+    themeObserver.observe(el, {
+      attributes: true,
+      attributeFilter: ["data-theme", "class", "style"],
+    });
+  }
+  document.addEventListener("change", queueRender, true);
+  document.addEventListener(
+    "transitionend",
+    ({ propertyName }) => {
+      if (propertyName === "background-color") queueRender();
+    },
+    true,
+  );
+  darkQuery.addEventListener("change", queueRender);
+</script></body></html>

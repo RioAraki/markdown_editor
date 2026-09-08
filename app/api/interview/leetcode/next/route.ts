@@ -1,78 +1,50 @@
 import { NextResponse } from 'next/server';
 import path from 'path';
-import { format } from 'date-fns';
+import { format, isValid, parseISO } from 'date-fns';
 import { loadInterviewPlan, loadLeetCode } from '@shared/interview/load';
 import {
-  allProblemStates,
   currentTopic,
+  dayProblemIds,
   problemUnitText,
   recommendProblems,
-  unlockedTopics,
 } from '@shared/interview/leetcode';
 
 const DATA_DIR = path.dirname(
   process.env.INTERVIEW_LOG_PATH || 'D:\\diary\\data\\interview\\log',
 );
 
-/**
- * One more problem, for a day with time to spare.
- *
- * Body: `{ exclude: number[], count?: number }` — the problems already on
- * today's card.
- *
- * An extra problem obeys the same rules as a scheduled one: new material comes
- * from the knowledge point currently being drilled, in that point's order, and
- * the old-to-new ratio is judged across the **whole day** rather than per
- * request. Judging one request on its own made every extra problem a redo —
- * with a single slot and any flagged problem waiting, the redo always won.
+/** Continue the same two-new/one-review sequence as daily generation.
+ * The saved day plus the client's unsaved IDs determine the whole-day ratio.
  */
 export async function POST(req: Request) {
   try {
-    const body: { exclude?: number[]; count?: number } =
+    const body: { exclude?: number[]; count?: number; date?: string } =
       await req.json().catch(() => ({}));
-
+    const date = body.date ?? format(new Date(), 'yyyy-MM-dd');
+    if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !isValid(parseISO(date))) {
+      return NextResponse.json({ error: 'Invalid date' }, { status: 400 });
+    }
+    if ((body.exclude !== undefined && (!Array.isArray(body.exclude) ||
+        !body.exclude.every((id) => Number.isSafeInteger(id) && id > 0))) ||
+        (body.count !== undefined && (!Number.isInteger(body.count) || body.count < 1))) {
+      return NextResponse.json({ error: 'Invalid problem IDs or count' }, { status: 400 });
+    }
     const [{ bank, log }, plan] = await Promise.all([
       loadLeetCode(DATA_DIR),
       loadInterviewPlan(DATA_DIR),
     ]);
-    const today = format(new Date(), 'yyyy-MM-dd');
-    const exclude = new Set(body.exclude ?? []);
-    const count = Math.min(Math.max(body.count ?? 1, 1), 5);
-
+    // Keep the client's displayed order, including unsaved changes; include
+    // other persisted blocks as a fallback for older clients.
+    const exclude = new Set([
+      ...(body.exclude ?? []),
+      ...dayProblemIds(plan.logs[date]),
+    ]);
+    const count = Math.min(body.count ?? 1, 5);
     const courseOrder = plan.inventory.domains
       .filter((d) => d.id === 'leetcode')
       .flatMap((d) => d.modules)
       .flatMap((m) => m.items.map((it) => it.id));
-    const topic = currentTopic(bank, log, today, courseOrder);
-
-    const unlocked = unlockedTopics(bank, log, today);
-    if (topic) unlocked.add(topic.itemId);
-
-    // How much of today is already redo. The ratio is 1:3, so a sixth problem
-    // is new material unless the day is genuinely short on review.
-    const states = allProblemStates(bank, log, today);
-    const flaggedWaiting = states.some(
-      // Not scoped to the current topic — redo and curriculum are separate
-      // systems, so a flag left behind in 链表 is still due while you are on
-      // 二分 — but gated on that topic having been trained, exactly as the
-      // recommender is. Without the same gate this would reserve a redo slot
-      // for a problem the recommender then refuses to serve, and the extra
-      // problem would silently come back empty.
-      (s) =>
-        s.redo &&
-        !s.stale &&
-        s.status === 'due' &&
-        !exclude.has(s.problem.id) &&
-        unlocked.has(s.problem.item ?? ''),
-    );
-
-    // Roughly one old for every three new, measured over the day as a whole.
-    const redosSoFar = states.filter(
-      (st) =>
-        exclude.has(st.problem.id) && st.status === 'due' && !st.stale,
-    ).length;
-    const wantRedos = Math.round((exclude.size + count) / 4);
-
+    const topic = currentTopic(bank, log, date, courseOrder);
     const recs = recommendProblems({
       bank,
       log,
@@ -81,25 +53,9 @@ export async function POST(req: Request) {
         ? courseOrder.slice(courseOrder.indexOf(topic.itemId))
         : undefined,
       count,
-      today,
+      today: date,
       exclude,
-      // Only meaningful in the random phase, where `itemId` is null: there the
-      // extra problem should not repeat a pattern already drilled today. Inside
-      // a course topic every problem is that topic, so it must stay empty.
-      avoidTopics: topic
-        ? new Set<string>()
-        : new Set(
-            bank.problems
-              .filter((p) => exclude.has(p.id))
-              .map((p) => p.item)
-              .filter((x): x is string => !!x),
-          ),
-      // Same 1:3 as the daily slot — one extra problem is new material
-      // unless something flagged has actually come due, in which case it is
-      // that. Asking for more work should not mean only ever new work.
-      reviewQuota: flaggedWaiting && redosSoFar < wantRedos ? 1 : 0,
     });
-
     return NextResponse.json({
       mode: topic ? 'course' : 'random',
       topic: topic?.itemId,
@@ -117,9 +73,6 @@ export async function POST(req: Request) {
     });
   } catch (error) {
     console.error('Error in POST /api/interview/leetcode/next:', error);
-    return NextResponse.json(
-      { error: 'Failed to pick another problem' },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: 'Failed to pick another problem' }, { status: 500 });
   }
 }

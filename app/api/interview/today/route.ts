@@ -27,6 +27,7 @@ import {
 } from '@shared/interview/stories';
 import {
   allProblemStates,
+  dayProblemIds,
   currentTopic,
   recommendProblems,
 } from '@shared/interview/leetcode';
@@ -104,16 +105,9 @@ export async function GET(req: Request) {
       const p = parseProblemUnit(unit);
       if (p) {
         const st = lcStates.get(p.id);
-        if (!st || st.attempts.length === 0 || st.stale) return false;
-        // Ask the schedule, not the calendar. This used to ask whether the
-        // problem had been attempted inside `MIN_REPEAT_DAYS` — but that is
-        // the floor on *re-serving* a problem, not a statement about whether
-        // the work is done. #930 was solved cleanly twice and is not due
-        // again until October; on the seventh day after the last solve the
-        // window lapsed and a stale unticked box from 八月 dragged it back.
-        // 'scheduled' means done and waiting; 'due' means it genuinely wants
-        // attention, and then the review pool will offer it anyway.
-        return st.status === 'scheduled' || st.status === 'retired';
+        // Only unseen work or an explicit due redo can remain outstanding.
+        // An old unticked checkbox must never override an unflagged result.
+        return !!st && st.attempts.length > 0 && (!st.redo || st.status !== 'due');
       }
       const q = parseQuestionUnit(unit);
       if (q) {
@@ -221,7 +215,7 @@ export async function GET(req: Request) {
 
     // For 刷题 slots, go one level deeper than the topic: pick the actual
     // problems, mixing overdue reviews with new ones from that topic.
-    const usedProblems = new Set<number>();
+    const usedProblems = new Set(dayProblemIds(fullPlan.logs[today]));
     const suggestedProblems: TodayPlanResponse['suggestedProblems'] = {};
     // The course order, straight off the inventory — 阶段一 first, and each
     // stage's points in the order they were laid out.
@@ -241,42 +235,19 @@ export async function GET(req: Request) {
       const recs = recommendProblems({
         bank: leetcode.bank,
         log: leetcode.log,
-        // One knowledge point at a time until the course is done; null after
-        // that, which is the random phase.
         itemId: topic?.itemId ?? null,
         courseOrder: remaining,
         count: Math.max(1, task.units),
         today,
         exclude: usedProblems,
+        // Carry-over is a preference inside the same eligibility and ratio
+        // rules, never an extra list spliced in after selection.
+        preferred: (pending.get(task.name)?.units ?? [])
+          .map((u) => parseProblemUnit(u)?.id)
+          .filter((id): id is number => id !== undefined),
       });
       for (const r of recs) usedProblems.add(r.problem.id);
-
-      // Unfinished problems from the last session go back on the card first,
-      // and take slots away from new ones rather than adding to the load.
-      //
-      // Units that have since been solved were already dropped by `isResolved`
-      // when the carry-over was built, so what arrives here is genuinely still
-      // outstanding.
-      const resume = (pending.get(task.name)?.units ?? [])
-        .map((u) => parseProblemUnit(u)?.id)
-        .filter((id): id is number => typeof id === 'number')
-        .map((id) => leetcode.bank.problems.find((p) => p.id === id))
-        .filter((p): p is NonNullable<typeof p> => !!p);
-
-      const carried = resume.map((p) => ({
-        id: p.id,
-        title: p.title,
-        url: p.url,
-        difficulty: p.difficulty,
-        kind: 'new' as const,
-        flagged: undefined,
-        reason: `接着做 · ${pending.get(task.name)?.date} 排了没做`,
-      }));
-      const keep = recs
-        .filter((r) => !resume.some((p) => p.id === r.problem.id))
-        .slice(0, Math.max(0, Math.max(1, task.units) - carried.length));
-
-      suggestedProblems[task.name] = [...carried, ...keep.map((r) => ({
+      suggestedProblems[task.name] = recs.map((r) => ({
         id: r.problem.id,
         title: r.problem.title,
         url: r.problem.url,
@@ -284,8 +255,7 @@ export async function GET(req: Request) {
         kind: r.kind,
         flagged: r.flagged,
         reason: r.reason,
-      }))];
-      for (const c of carried) usedProblems.add(c.id);
+      }));
     }
 
     // Same idea one level down for 题库 slots: name the actual questions.
