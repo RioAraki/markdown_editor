@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:interview": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test ../diary/shared/interview/leetcode.test.mjs tests/interview-scheduling.test.cjs",
+    "test:interview": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test ../diary/shared/interview/leetcode.test.mjs tests/interview-scheduling.test.cjs tests/today-picker.test.cjs",
     "dev:unbounded": "next dev -p 3002 -H 0.0.0.0"
   },
   "dependencies": {

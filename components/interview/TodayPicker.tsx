@@ -220,24 +220,7 @@ export function TodayPicker() {
       .filter(Boolean),
   );
 
-  if (todayExists) {
-    const missing = (menu?.blocks ?? []).filter((b) => !already.has(b.name));
-    if (missing.length === 0) return null;
-    return (
-      <TopUp
-        missing={missing}
-        chosen={chosenBlocks}
-        setChosen={setChosenBlocks}
-        onAdd={() => void create(true)}
-        busy={creating}
-        error={error}
-        ready={!!data}
-      />
-    );
-  }
-
-  if (!data) return null;
-
+  // Both the initial picker and TopUp need this handler before either returns.
   const create = async (append = false) => {
     if (!data) return;
     setCreating(true);
@@ -280,6 +263,24 @@ export function TodayPicker() {
       setCreating(false);
     }
   };
+
+  if (todayExists) {
+    const missing = (menu?.blocks ?? []).filter((b) => !already.has(b.name));
+    if (missing.length === 0) return null;
+    return (
+      <TopUp
+        missing={missing}
+        chosen={chosenBlocks}
+        setChosen={setChosenBlocks}
+        onAdd={() => void create(true)}
+        busy={creating}
+        error={error}
+        ready={!!data}
+      />
+    );
+  }
+
+  if (!data) return null;
 
   if (!chosen && (menu?.blocks.length ?? 0) === 0) {
     return (
