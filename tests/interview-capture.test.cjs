@@ -34,6 +34,20 @@ test('stop includes the final audio chunk and releases the microphone', async ()
   assert.ok(take.duration >= 0);
   assert.equal(releases, 1);
 });
+test('seven minutes automatically stops, retains the final chunk and releases the microphone', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const capture = await startInterviewCapture(new AbortController().signal);
+  let result;
+  capture.finished.then(take => { result = take; }).catch(() => {});
+  t.mock.timers.tick(420000);
+  await Promise.resolve(); await Promise.resolve();
+  try {
+    assert.ok(result, 'must stop without clicking the stop button');
+    assert.equal(result.duration, 420);
+    assert.equal(await result.blob.text(), 'final audio');
+    assert.equal(releases, 1);
+  } finally { capture.cancel(); t.mock.timers.reset(); }
+});
 test('only one question can own the microphone, and cancel releases it', async () => {
   const capture = await startInterviewCapture(new AbortController().signal);
   await assert.rejects(startInterviewCapture(new AbortController().signal), /另一道题/);

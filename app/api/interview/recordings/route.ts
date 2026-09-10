@@ -1,4 +1,7 @@
 import { NextResponse } from 'next/server';
+import { createReadStream } from 'node:fs';
+import { Readable } from 'node:stream';
+import { MAX_RECORDING_SECONDS } from '@/lib/recordingLimits';
 import {
   MAX_RECORDING_BYTES, RecordingError, questionDirectory, listRecordings,
   readAudio, saveRecording, renameRecording, deleteRecording, saveEnhancement,
@@ -31,20 +34,26 @@ export async function GET(req: Request) {
   try {
     const { question, id, url } = params(req);
     if (!id) return NextResponse.json({ recordings: await listRecordings(question) }, { headers: privateHeaders });
-    const { data, meta } = await readAudio(question, id, url.searchParams.get('variant') === 'cleaned');
+    const strength = url.searchParams.get('strength') || undefined;
+    if (strength !== undefined && strength !== 'standard' && strength !== 'compact') throw new RecordingError(400, '无效的整理强度');
+    const { file, size, meta } = await readAudio(question, id, url.searchParams.get('variant') === 'cleaned', strength);
+    // Bounded chunks, including full responses. Cancelling the web stream closes the file.
+    const stream = (start = 0, end = size - 1) => Readable.toWeb(createReadStream(file, { start, end, highWaterMark: 64 * 1024 }), {
+      strategy: { highWaterMark: 64 * 1024, size: chunk => chunk.byteLength },
+    }) as ReadableStream<Uint8Array>;
     const headers = { ...privateHeaders, 'Content-Type': meta.mimeType, 'Accept-Ranges': 'bytes' };
     const range = req.headers.get('range');
-    if (!range) return new Response(new Uint8Array(data), { headers: { ...headers, 'Content-Length': String(data.length) } });
+    if (!range) return new Response(stream(), { headers: { ...headers, 'Content-Length': String(size) } });
     const match = /^bytes=(\d*)-(\d*)$/.exec(range);
     let start = match?.[1] ? Number(match[1]) : 0;
-    let end = match?.[2] ? Number(match[2]) : data.length - 1;
-    if (match && !match[1] && match[2]) { start = Math.max(0, data.length - Number(match[2])); end = data.length - 1; }
-    if (!match || (!match[1] && !match[2]) || !Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || start >= data.length) {
-      return new Response(null, { status: 416, headers: { ...headers, 'Content-Range': `bytes */${data.length}` } });
+    let end = match?.[2] ? Number(match[2]) : size - 1;
+    if (match && !match[1] && match[2]) { start = Math.max(0, size - Number(match[2])); end = size - 1; }
+    if (!match || (!match[1] && !match[2]) || !Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || start >= size) {
+      return new Response(null, { status: 416, headers: { ...headers, 'Content-Range': `bytes */${size}` } });
     }
-    end = Math.min(end, data.length - 1);
-    return new Response(new Uint8Array(data.subarray(start, end + 1)), {
-      status: 206, headers: { ...headers, 'Content-Length': String(end - start + 1), 'Content-Range': `bytes ${start}-${end}/${data.length}` },
+    end = Math.min(end, size - 1);
+    return new Response(stream(start, end), {
+      status: 206, headers: { ...headers, 'Content-Length': String(end - start + 1), 'Content-Range': `bytes ${start}-${end}/${size}` },
     });
   } catch (e) { return errorResponse(e); }
 }
@@ -54,7 +63,7 @@ export async function POST(req: Request) {
     const mimeType = req.headers.get('content-type')?.split(';')[0].trim().toLowerCase() ?? '';
     if (!['audio/webm', 'audio/mp4', 'audio/ogg', 'audio/wav'].includes(mimeType)) throw new RecordingError(415, '不支持此录音格式');
     const duration = Number(url.searchParams.get('duration') ?? 0);
-    if (!Number.isFinite(duration) || duration < 0 || duration > 86400) throw new RecordingError(400, '无效的录音时长');
+    if (!Number.isFinite(duration) || duration < 0 || duration > MAX_RECORDING_SECONDS) throw new RecordingError(400, '单条录音不能超过 7 分钟');
     if (Number(req.headers.get('content-length')) > MAX_RECORDING_BYTES) throw new RecordingError(413, '单条录音不能超过 64 MB');
     const chunks: Buffer[] = [];
     let size = 0;

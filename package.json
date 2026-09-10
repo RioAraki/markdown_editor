@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start -H 127.0.0.1",
     "lint": "next lint",
-    "test:interview": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test ../diary/shared/interview/leetcode.test.mjs tests/interview-scheduling.test.cjs tests/today-picker.test.cjs tests/interview-recordings.test.cjs tests/interview-capture.test.cjs tests/audio-processing.test.cjs tests/live-waveform.test.cjs",
+    "test:interview": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test ../diary/shared/interview/leetcode.test.mjs tests/interview-scheduling.test.cjs tests/today-picker.test.cjs tests/interview-recordings.test.cjs tests/interview-capture.test.cjs tests/audio-processing.test.cjs tests/live-waveform.test.cjs tests/audio-resources.test.cjs tests/interview-story-review.test.cjs tests/interview-overview-history.test.cjs tests/challenge-status.test.cjs",
     "dev:unbounded": "next dev -p 3002 -H 127.0.0.1"
   },
   "dependencies": {

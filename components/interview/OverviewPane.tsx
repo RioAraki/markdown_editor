@@ -26,6 +26,7 @@ import type { LeetCodeLog, ProblemBank } from '@shared/interview/leetcode';
 import { useInterview } from '@/contexts/InterviewContext';
 import { serializeInterviewDayDoc } from '@/lib/interviewParser';
 import { getTodayDate } from '@/lib/dateUtils';
+import { InterviewAnswerReview } from './InterviewAnswerReview';
 
 interface Bundle {
   plan: InterviewPlan;
@@ -278,6 +279,8 @@ export function OverviewPane() {
         overall={model.overall}
         weekTracks={model.weekTracks}
         notes={bundle?.notes}
+        renderItemDetail={item => (item.item.id.startsWith('bh-') || bundle?.stories?.bank.stories.some(story => story.clusters.some(cluster => cluster.id === item.item.id)))
+          ? <InterviewAnswerReview itemId={item.item.id} stories={bundle?.stories} days={days} /> : null}
       />
     </div>
   );

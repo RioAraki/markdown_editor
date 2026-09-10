@@ -18,6 +18,24 @@ async function save(question = key) {
   assert.equal(res.status, 201);
   return res.json();
 }
+test('new recordings over seven minutes are rejected', async () => {
+  const res = await route.POST(request('POST', { question: 'behavioral:bh-limit', duration: '421' }, bytes, { 'Content-Type': 'audio/webm' }));
+  assert.equal(res.status, 400);
+});
+test('a range request reads only the requested audio range, not the full file', async () => {
+  const rec = await save('behavioral:bh-range');
+  const io = require('node:fs/promises');
+  const original = io.readFile;
+  io.readFile = async (file, ...args) => {
+    if (path.basename(String(file)) === 'audio') throw Error('Full audio read is forbidden');
+    return original(file, ...args);
+  };
+  try {
+    const res = await route.GET(request('GET', { question: 'behavioral:bh-range', id: rec.id }, undefined, { Range: 'bytes=2-5' }));
+    assert.equal(res.status, 206);
+    assert.deepEqual(Buffer.from(await res.arrayBuffer()), bytes.subarray(2, 6));
+  } finally { io.readFile = original; }
+});
 test.after(() => {
   assert.equal(path.dirname(root), path.resolve(os.tmpdir()));
   assert.ok(path.basename(root).startsWith('interview-audio-'));
@@ -106,4 +124,27 @@ test('processed audio and waveforms persist separately from the untouched origin
   assert.equal(list.recordings[0].enhancement.duration, 1);
   await route.DELETE(request('DELETE', query));
   assert.equal((await route.GET(request('GET', { ...query, variant: 'cleaned' }))).status, 404);
+});
+
+test('an existing v1 take can gain independent standard and compact versions', async () => {
+  const { encodeWave } = makeLoader()(path.resolve('lib/audioProcessing.ts'));
+  const rec = await save('behavioral:bh-strength');
+  const query = { question: 'behavioral:bh-strength', id: rec.id };
+  for (const [version, strength, duration] of [[1, undefined, 3], [2, 'standard', 2], [2, 'compact', 1]]) {
+    const form = new FormData();
+    form.set('audio', new Blob([encodeWave(new Float32Array(duration * 8000).fill(.1), 8000)], { type: 'audio/wav' }), 'cleaned.wav');
+    form.set('analysis', JSON.stringify({ version, strength, duration, originalDuration: 3, removedSeconds: 3 - duration, status: duration < 3 ? 'trimmed' : 'unchanged', waveform: Array(240).fill(.1), originalWaveform: Array(240).fill(.1) }));
+    assert.equal((await route.PUT(request('PUT', query, form))).status, 200);
+  }
+  const list = await (await route.GET(request('GET', { question: query.question }))).json();
+  assert.equal(list.recordings[0].enhancement.strength, 'standard');
+  assert.equal(list.recordings[0].enhancements.compact.duration, 1);
+  for (const [strength, duration] of [['standard', 2], ['compact', 1]]) {
+    const media = await route.GET(request('GET', { ...query, variant: 'cleaned', strength }));
+    assert.equal(media.status, 200);
+    assert.equal((await media.arrayBuffer()).byteLength, 44 + duration * 8000 * 2);
+  }
+  const original = await route.GET(request('GET', query));
+  assert.deepEqual(Buffer.from(await original.arrayBuffer()), bytes);
+  assert.equal((await route.GET(request('GET', { ...query, variant: 'cleaned', strength: '../../other' }))).status, 400);
 });

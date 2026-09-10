@@ -1,0 +1,2 @@
+export const MAX_RECORDING_SECONDS = 7 * 60;
+export const RECORDING_WARNING_SECONDS = 5 * 60;

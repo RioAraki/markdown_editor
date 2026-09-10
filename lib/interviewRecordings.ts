@@ -36,34 +36,39 @@ export async function readRecording(question: string, id: string): Promise<Inter
   try {
     const dir = takeDirectory(question, id);
     const meta = JSON.parse(await fs.readFile(path.join(dir, 'meta.json'), 'utf8'));
-    const enhancement = await fs.readFile(path.join(dir, 'enhanced/analysis.json'), 'utf8').then(JSON.parse).catch((e: NodeJS.ErrnoException) => {
+    const read = (folder: string) => fs.readFile(path.join(dir, folder, 'analysis.json'), 'utf8').then(JSON.parse).catch((e: NodeJS.ErrnoException) => {
       if (e.code === 'ENOENT') return undefined;
       throw e;
     });
-    return { ...meta, enhancement };
+    const [legacy, standard, compact] = await Promise.all([read('enhanced'), read('enhanced-v2-standard'), read('enhanced-v2-compact')]);
+    return { ...meta, enhancement: standard || compact || legacy, enhancements: { standard, compact } };
   }
   catch (e) {
     if ((e as NodeJS.ErrnoException).code === 'ENOENT') throw new RecordingError(404, '录音不存在');
     throw e;
   }
 }
-export async function readAudio(question: string, id: string, cleaned = false) {
+export async function readAudio(question: string, id: string, cleaned = false, strength?: 'standard' | 'compact') {
   const meta = await readRecording(question, id);
-  if (cleaned && !meta.enhancement) throw new RecordingError(404, '此录音还没有整理版');
+  const enhancement = strength ? meta.enhancements?.[strength] : meta.enhancement;
+  if (cleaned && !enhancement) throw new RecordingError(404, '此录音还没有此强度的整理版');
+  const folder = enhancement?.version === 2 ? `enhanced-v2-${enhancement.strength}` : 'enhanced';
+  const file = path.join(takeDirectory(question, id), cleaned ? `${folder}/audio.wav` : 'audio');
+  const stat = await fs.stat(file);
   return {
-    meta: cleaned ? { ...meta, mimeType: 'audio/wav', duration: meta.enhancement!.duration } : meta,
-    data: await fs.readFile(path.join(takeDirectory(question, id), cleaned ? 'enhanced/audio.wav' : 'audio')),
+    meta: cleaned ? { ...meta, mimeType: 'audio/wav', duration: enhancement!.duration } : meta,
+    file, size: stat.size,
   };
 }
 
 export async function saveEnhancement(question: string, id: string, audio: Buffer, input: unknown) {
   const meta = await readRecording(question, id);
-  if (meta.enhancement) return meta; // retry after a lost response
   const a = input as RecordingEnhancement | null;
   const peaks = (v: unknown) => Array.isArray(v) && v.length === 240 && v.every(n => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 1);
-  if (!a || a.version !== 1 || !['trimmed', 'unchanged', 'quiet'].includes(a.status) ||
+  if (!a || ![1, 2].includes(a.version) || (a.version === 2 && !['standard', 'compact'].includes(a.strength ?? '')) || !['trimmed', 'unchanged', 'quiet'].includes(a.status) ||
     ![a.duration, a.originalDuration, a.removedSeconds].every(n => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 86400) ||
     a.duration <= 0 || Math.abs(a.originalDuration - a.duration - a.removedSeconds) > .03 || !peaks(a.waveform) || !peaks(a.originalWaveform)) throw new RecordingError(400, '无效的波形或整理结果');
+  if (a.version === 2 ? meta.enhancements?.[a.strength!] : meta.enhancement?.version === 1) return meta;
   // Our encoder writes a canonical mono 16-bit PCM WAV. Check bytes against
   // metadata so waveform time and the seekable media cannot silently disagree.
   if (audio.length < 46 || audio.length > MAX_RECORDING_BYTES || audio.toString('ascii', 0, 4) !== 'RIFF' || audio.toString('ascii', 8, 16) !== 'WAVEfmt ' ||
@@ -74,12 +79,13 @@ export async function saveEnhancement(question: string, id: string, audio: Buffe
   const temp = path.join(dir, `.enhancing-${randomUUID()}`);
   await fs.mkdir(temp); // do not recreate a recording concurrently deleted by the user
   try {
-    const analysis: RecordingEnhancement = { version: 1, status: a.status, duration: a.duration, originalDuration: a.originalDuration, removedSeconds: a.removedSeconds, waveform: a.waveform, originalWaveform: a.originalWaveform };
+    const analysis: RecordingEnhancement = { version: a.version, ...(a.version === 2 ? { strength: a.strength } : {}), status: a.status, duration: a.duration, originalDuration: a.originalDuration, removedSeconds: a.removedSeconds, waveform: a.waveform, originalWaveform: a.originalWaveform };
     await fs.writeFile(path.join(temp, 'audio.wav'), audio);
     await fs.writeFile(path.join(temp, 'analysis.json'), JSON.stringify(analysis));
-    await fs.rename(temp, path.join(dir, 'enhanced'));
+    await fs.rename(temp, path.join(dir, a.version === 2 ? `enhanced-v2-${a.strength}` : 'enhanced'));
   } catch (e) {
-    if (!['EEXIST', 'ENOTEMPTY', 'EPERM'].includes((e as NodeJS.ErrnoException).code ?? '') || !(await readRecording(question, id)).enhancement) throw e;
+    const current = await readRecording(question, id);
+    if (!['EEXIST', 'ENOTEMPTY', 'EPERM'].includes((e as NodeJS.ErrnoException).code ?? '') || !(a.version === 2 ? current.enhancements?.[a.strength!] : current.enhancement)) throw e;
   } finally { await fs.rm(temp, { recursive: true, force: true }); }
   return readRecording(question, id);
 }

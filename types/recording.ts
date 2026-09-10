@@ -6,10 +6,12 @@ export interface InterviewRecording {
   mimeType: string;
   size: number;
   enhancement?: RecordingEnhancement;
+  enhancements?: Partial<Record<'standard' | 'compact', RecordingEnhancement>>;
 }
 
 export interface RecordingEnhancement {
-  version: 1;
+  version: 1 | 2;
+  strength?: 'standard' | 'compact';
   status: 'trimmed' | 'unchanged' | 'quiet';
   duration: number;
   originalDuration: number;

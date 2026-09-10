@@ -8,6 +8,8 @@ import { protectRecording } from '@/lib/protectRecording';
 import { prepareRecording } from '@/lib/prepareRecording';
 import { LiveRecordingWaveform } from './LiveRecordingWaveform';
 import { RecordingPlayer } from './RecordingPlayer';
+import { LocalAudio } from './LocalAudio';
+import { RECORDING_WARNING_SECONDS } from '@/lib/recordingLimits';
 
 const durationLabel = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 const errorText = (e: unknown) => e instanceof Error ? e.message : '录音操作失败，请重试';
@@ -19,7 +21,7 @@ async function checked(response: Response) {
 }
 
 /** Mount with a stable question key; histories deliberately span all practice dates. */
-export function RecordingPanel({ questionKey }: { questionKey: string }) {
+export function RecordingPanel({ questionKey, historyOnly = false }: { questionKey: string; historyOnly?: boolean }) {
   const [recordings, setRecordings] = useState<InterviewRecording[]>([]);
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -33,6 +35,7 @@ export function RecordingPanel({ questionKey }: { questionKey: string }) {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [discarding, setDiscarding] = useState(false);
+  const [limitReached, setLimitReached] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
   const alive = useRef(true);
   const capture = useRef<InterviewCapture | null>(null);
@@ -53,6 +56,11 @@ export function RecordingPanel({ questionKey }: { questionKey: string }) {
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => { alive.current = false; controller.abort(); permission.current?.abort(); capture.current?.cancel(); };
   }, [questionKey]);
+  useEffect(() => {
+    const updated = (event: Event) => { if ((event as CustomEvent).detail === questionKey) void refresh().catch(() => {}); };
+    window.addEventListener('interview:recordings-updated', updated);
+    return () => window.removeEventListener('interview:recordings-updated', updated);
+  }, [questionKey, refresh]);
   useEffect(() => {
     if (!pending) { setPreview(''); return; }
     const url = URL.createObjectURL(pending.blob);
@@ -99,13 +107,14 @@ export function RecordingPanel({ questionKey }: { questionKey: string }) {
       }
       if (!alive.current) return;
       setRecordings(cur => [rec, ...cur.filter(r => r.id !== rec.id)]); setPending(null); setExpanded(true);
+      window.dispatchEvent(new CustomEvent('interview:recordings-updated', { detail: questionKey }));
     } catch (e) { if (alive.current) setError(`${errorText(e)}。录音仍可试听、下载或重试保存。`); }
     finally { saveBusy.current = false; if (alive.current) setPhase('idle'); }
   }
   async function start() {
     if (operation.current || pending || phase !== 'idle') return;
     operation.current = true;
-    setError(''); setElapsed(0); setPhase('permission');
+    setError(''); setLimitReached(false); setElapsed(0); setPhase('permission');
     const controller = new AbortController();
     permission.current = controller;
     try {
@@ -116,7 +125,7 @@ export function RecordingPanel({ questionKey }: { questionKey: string }) {
       setPhase('recording');
       void current.finished.then(take => {
         if (!alive.current) return;
-        capture.current = null; setPending(take); void save(take);
+        capture.current = null; setLimitReached(!!take.reachedLimit); setPending(take); void save(take);
       }).catch(e => {
         if (alive.current) { setError(errorText(e)); setPhase('idle'); }
       }).finally(() => { operation.current = false; });
@@ -138,24 +147,26 @@ export function RecordingPanel({ questionKey }: { questionKey: string }) {
       if (!alive.current) return;
       setRecordings(cur => method === 'DELETE' ? cur.filter(r => r.id !== id) : cur.map(r => r.id === id ? body : r));
       setEditing(null); setDeleting(null);
+      window.dispatchEvent(new CustomEvent('interview:recordings-updated', { detail: questionKey }));
     } catch (e) { if (alive.current) setError(errorText(e)); }
     finally { if (alive.current) setBusyId(null); }
   }
 
   return <div ref={panel} className="mt-2 rounded-md border border-stone-200 bg-white px-3 py-2 text-xs" aria-label="本题录音与回放">
     <div className="flex items-center gap-2 flex-wrap">
-      {phase === 'recording' ? <button type="button" onClick={() => { void capture.current?.stop(); }} className="inline-flex items-center gap-1 rounded bg-rose-600 text-white px-2 py-1.5"><Square className="w-3 h-3" />停止并保存 · {durationLabel(elapsed)}</button>
-        : <button type="button" disabled={phase !== 'idle' || !!pending} onClick={() => void start()} className="inline-flex items-center gap-1 rounded bg-indigo-600 text-white px-2 py-1.5 disabled:opacity-40">{phase === 'idle' ? <Mic className="w-3 h-3" /> : <Loader2 className="w-3 h-3 animate-spin" />}{phase === 'permission' ? '等待麦克风权限…' : phase === 'processing' ? '整理静音与波形…' : phase === 'saving' ? '保存到本机…' : '开始录音'}</button>}
+      {!historyOnly && (phase === 'recording' ? <button type="button" onClick={() => { void capture.current?.stop(); }} className="inline-flex items-center gap-1 rounded bg-rose-600 text-white px-2 py-1.5"><Square className="w-3 h-3" />停止并保存 · {durationLabel(elapsed)}</button>
+        : <button type="button" disabled={phase !== 'idle' || !!pending} onClick={() => void start()} className="inline-flex items-center gap-1 rounded bg-indigo-600 text-white px-2 py-1.5 disabled:opacity-40">{phase === 'idle' ? <Mic className="w-3 h-3" /> : <Loader2 className="w-3 h-3 animate-spin" />}{phase === 'permission' ? '等待麦克风权限…' : phase === 'processing' ? '整理静音与波形…' : phase === 'saving' ? '保存到本机…' : '开始录音'}</button>)}
       <button type="button" onClick={() => setExpanded(v => !v)} className="text-stone-600 hover:text-indigo-700">{expanded ? '收起回放' : `历史录音（${recordings.length}）`}</button>
       <span className="text-[10px] text-stone-400">仅本地 · 每次回答单独保留</span>
       {phase === 'permission' && <button type="button" onClick={() => { permission.current?.abort(); setError('已取消等待；若权限窗口仍在显示，请关闭或拒绝它。'); }}>取消</button>}
     </div>
     {phase === 'recording' && capture.current && <LiveRecordingWaveform stream={capture.current.stream} />}
-    {phase === 'recording' && <p className="mt-1 text-stone-500">录完自动掐头去尾、缩短长停顿；原始录音同时保留。</p>}
+    {phase === 'recording' && <p className="mt-1 text-stone-500">{elapsed >= RECORDING_WARNING_SECONDS ? '已超过 5 分钟，建议收尾。满 7 分钟将自动停止并保存。' : '单次最多 7 分钟，录完自动整理，原音同时保留。'}</p>}
+    {limitReached && <p role="status" className="mt-2 text-amber-700">已到 7 分钟，录音已自动停止。</p>}
     {error && <p role="alert" className="mt-2 text-rose-700">{error} <button type="button" className="underline" onClick={() => void refresh().then(() => setError('')).catch(e => setError(errorText(e)))}>重新加载列表</button></p>}
     {pending && preview && <div className="mt-2 space-y-2">
       <p className="text-amber-700">{phase === 'processing' ? '原始录音已保存，正在本地整理静音…' : phase === 'saving' ? '正在保存这次回答…' : '这次回答尚未完成保存'}</p>
-      <audio controls src={preview} preload="metadata" className="w-full h-9" />
+      <LocalAudio key={preview} src={preview} label="试听本次录音" />
       {phase === 'idle' && <div className="flex gap-3"><button type="button" className="text-indigo-700 underline" onClick={() => void save(pending)}>重试保存</button><a href={preview} download={`录音-${Date.now()}.${pending.blob.type.includes('mp4') ? 'm4a' : pending.blob.type.includes('ogg') ? 'ogg' : 'webm'}`} className="underline">下载备份</a><button type="button" className="text-stone-500" onClick={() => setDiscarding(true)}>放弃这次录音</button></div>}
       {discarding && phase === 'idle' && <div className="flex gap-3 text-rose-700"><span>放弃尚未保存的部分？已保存的原音仍会保留。</span><button type="button" onClick={() => { setPending(null); setDiscarding(false); setError(''); void refresh().catch(e => setError(errorText(e))); }}>确认放弃</button><button type="button" onClick={() => setDiscarding(false)}>取消</button></div>}
     </div>}
@@ -166,7 +177,7 @@ export function RecordingPanel({ questionKey }: { questionKey: string }) {
           {editing === rec.id ? <><input aria-label="录音名称" value={name} maxLength={120} onChange={e => setName(e.target.value)} className="flex-1 min-w-0 border rounded px-2 py-1" /><button type="button" disabled={!!busyId || !name.trim()} onClick={() => void change(rec.id, 'PATCH')} className="text-indigo-700">保存名称</button><button type="button" onClick={() => setEditing(null)}>取消</button></>
             : <><span className="flex-1 min-w-0 break-words text-stone-700">{rec.name}</span><span className="text-stone-400">{durationLabel(rec.duration)}</span><button type="button" disabled={!!busyId} onClick={() => { setEditing(rec.id); setName(rec.name); }} className="text-stone-500 hover:text-indigo-700">重命名</button><button type="button" disabled={!!busyId} onClick={() => setDeleting(rec.id)} className="text-stone-500 hover:text-rose-700">删除</button></>}
         </div>
-        <RecordingPlayer record={rec} src={endpoint(questionKey, rec.id)} />
+        <RecordingPlayer record={rec} src={endpoint(questionKey, rec.id)} onUpdated={updated => { setRecordings(cur => cur.map(r => r.id === updated.id ? updated : r)); window.dispatchEvent(new CustomEvent('interview:recordings-updated', { detail: questionKey })); }} />
         {deleting === rec.id && <div className="flex gap-3 items-center text-rose-700"><span>删除这条本地录音？</span><button type="button" disabled={!!busyId} onClick={() => void change(rec.id, 'DELETE')}>确认删除</button><button type="button" onClick={() => setDeleting(null)} className="text-stone-500">取消</button></div>}
       </div>)}
     </div>}

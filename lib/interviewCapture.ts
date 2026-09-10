@@ -1,4 +1,5 @@
-export interface CapturedAnswer { id: string; blob: Blob; duration: number }
+import { MAX_RECORDING_SECONDS } from './recordingLimits';
+export interface CapturedAnswer { id: string; blob: Blob; duration: number; reachedLimit?: boolean }
 export interface InterviewCapture {
   stream: MediaStream;
   finished: Promise<CapturedAnswer>;
@@ -16,9 +17,11 @@ export async function startInterviewCapture(signal: AbortSignal): Promise<Interv
   microphoneBusy = true;
   let stream: MediaStream | undefined;
   let released = false;
+  let limitTimer: ReturnType<typeof setTimeout> | undefined;
   const release = () => {
     if (released) return;
     released = true;
+    clearTimeout(limitTimer);
     stream?.getTracks().forEach(track => track.stop());
     microphoneBusy = false;
   };
@@ -41,6 +44,8 @@ export async function startInterviewCapture(signal: AbortSignal): Promise<Interv
     const recorder = new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 64000 });
     const chunks: Blob[] = [];
     const started = Date.now();
+    let reachedLimit = false;
+    const stopAtLimit = () => { reachedLimit = true; if (recorder.state !== 'inactive') recorder.stop(); };
     let cancelled = false;
     let resolve!: (take: CapturedAnswer) => void;
     let reject!: (error: Error) => void;
@@ -54,17 +59,22 @@ export async function startInterviewCapture(signal: AbortSignal): Promise<Interv
       signal.removeEventListener('abort', cancel);
       reject(new Error('录音已取消'));
     };
-    recorder.ondataavailable = event => { if (!cancelled && event.data.size) chunks.push(event.data); };
+    recorder.ondataavailable = event => {
+      if (!cancelled && event.data.size) chunks.push(event.data);
+      if (!cancelled && recorder.state !== 'inactive' && Date.now() - started >= MAX_RECORDING_SECONDS * 1000) stopAtLimit();
+    };
     recorder.onerror = () => { cancel(); };
     recorder.onstop = () => {
       release();
       signal.removeEventListener('abort', cancel);
       if (cancelled) return;
       const blob = new Blob(chunks, { type: recorder.mimeType || mimeType });
+      chunks.length = 0;
       if (!blob.size) reject(new Error('没有录到声音，请检查麦克风后重试'));
-      else resolve({ id: crypto.randomUUID(), blob, duration: (Date.now() - started) / 1000 });
+      else resolve({ id: crypto.randomUUID(), blob, duration: Math.min(MAX_RECORDING_SECONDS, (Date.now() - started) / 1000), reachedLimit });
     };
     recorder.start(1000);
+    limitTimer = setTimeout(stopAtLimit, MAX_RECORDING_SECONDS * 1000);
     signal.addEventListener('abort', cancel, { once: true });
     return {
       stream,

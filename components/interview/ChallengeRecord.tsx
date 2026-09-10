@@ -78,30 +78,38 @@ export function ChallengeRecord({
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const dirty = useRef(false);
+  const latestText = useRef('');
+  const writes = useRef<Promise<void>>(Promise.resolve());
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
-    if (!dirty.current) setText(rec?.answer ?? '');
+    if (!dirty.current) { latestText.current = rec?.answer ?? ''; setText(latestText.current); }
   }, [rec?.answer]);
 
   const write = useCallback(
-    async (patch: Record<string, unknown>) => {
-      if (!q) return;
-      setSaving(true);
-      try {
-        const res = await fetch('/api/interview/stories', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ storyId: q.storyId, questionId: q.id, ...patch }),
-        });
-        if (!res.ok) throw new Error();
-        dirty.current = false;
-        setSavedAt(new Date().toLocaleTimeString('zh-CN', { hour12: false }));
-        window.dispatchEvent(new CustomEvent('interview:stories-updated'));
-      } catch {
-        /* leave the text on screen; the next keystroke retries */
-      } finally {
-        setSaving(false);
-      }
+    (patch: Record<string, unknown>) => {
+      if (!q) return Promise.resolve();
+      // A status click also flushes the draft; queued writes cannot overwrite
+      // a newer status with an older autosave response.
+      const payload = { ...patch };
+      if (dirty.current && typeof payload.answer !== 'string') payload.answer = latestText.current;
+      const pending = writes.current.then(async () => {
+        setSaving(true); setSaveError('');
+        try {
+          const res = await fetch('/api/interview/stories', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ storyId: q.storyId, questionId: q.id, ...payload }),
+          });
+          if (!res.ok) throw new Error();
+          if (typeof payload.answer === 'string' && payload.answer === latestText.current) dirty.current = false;
+          setSavedAt(new Date().toLocaleTimeString('zh-CN', { hour12: false }));
+          window.dispatchEvent(new CustomEvent('interview:stories-updated'));
+        } catch {
+          setSaveError('答案或状态保存失败，请重试；当前文字仍保留。');
+        } finally { setSaving(false); }
+      });
+      writes.current = pending;
+      return pending;
     },
     [q],
   );
@@ -128,7 +136,7 @@ export function ChallengeRecord({
   const chip =
     st === 'spoken'
       ? 'bg-emerald-600 text-white border-emerald-600'
-      : st === 'flagged'
+      : st === 'flagged' || st === 'struggled'
         ? 'bg-amber-500 text-white border-amber-500'
         : st === 'draft'
           ? 'bg-indigo-100 text-indigo-700 border-indigo-300'
@@ -242,6 +250,7 @@ export function ChallengeRecord({
               value={text}
               onChange={(e) => {
                 dirty.current = true;
+                latestText.current = e.target.value;
                 setText(e.target.value);
               }}
               rows={9}
@@ -262,7 +271,14 @@ export function ChallengeRecord({
             onStuck={(followUpId, stuck) => write({ followUpId, stuck })}
           />
 
+          {saveError && <p role="alert" className="text-xs text-rose-700">{saveError}</p>}
           <div className="flex items-center gap-2 flex-wrap">
+            <button type="button" aria-pressed={st === 'struggled'}
+              onClick={() => void write({ status: st === 'struggled' ? 'draft' : 'struggled' })}
+              title="只记录本次表达状态，何时再答由你决定"
+              className={`text-[11px] px-2 py-1 rounded border ${st === 'struggled' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-stone-600 border-stone-300 hover:border-amber-500'}`}>
+              磕磕绊绊
+            </button>
             <button
               type="button"
               onClick={() => void write({ status: st === 'spoken' ? 'draft' : 'spoken' })}

@@ -20,7 +20,7 @@ const DATA_DIR = path.dirname(
 );
 const STORIES_DIR = path.join(DATA_DIR, 'stories');
 
-const STATUSES: AnswerStatus[] = ['todo', 'draft', 'flagged', 'spoken'];
+const STATUSES: AnswerStatus[] = ['todo', 'draft', 'flagged', 'spoken', 'struggled'];
 const GRADES: Grade[] = ['A', 'B', 'C', 'F'];
 
 /** The bank, your answers, where the front line is, and what is due next. */
