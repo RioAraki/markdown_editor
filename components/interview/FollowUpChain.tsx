@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CornerDownRight, Loader2 } from 'lucide-react';
 import type { FollowUp } from '@shared/interview/stories';
+import { RecordingPanel } from './RecordingPanel';
 
 /**
  * The exchange one answer set off.
@@ -27,10 +28,12 @@ function depthOf(id: string) {
 
 export function FollowUpChain({
   items,
+  recordingPrefix,
   onSave,
   onStuck,
 }: {
   items: FollowUp[];
+  recordingPrefix?: string;
   onSave: (followUpId: string, answer: string) => Promise<void>;
   onStuck: (followUpId: string, stuck: boolean) => Promise<void>;
 }) {
@@ -45,7 +48,7 @@ export function FollowUpChain({
         </span>
       </div>
       {items.map((f) => (
-        <FollowUpItem key={f.id} f={f} onSave={onSave} onStuck={onStuck} />
+        <FollowUpItem key={f.id} f={f} onSave={onSave} onStuck={onStuck} recordingKey={recordingPrefix && /^\d+(?:\.\d+)*$/.test(f.id) ? `${recordingPrefix}-followup-${f.id.replaceAll('.', '-')}` : undefined} />
       ))}
     </div>
   );
@@ -53,10 +56,12 @@ export function FollowUpChain({
 
 function FollowUpItem({
   f,
+  recordingKey,
   onSave,
   onStuck,
 }: {
   f: FollowUp;
+  recordingKey?: string;
   onSave: (id: string, answer: string) => Promise<void>;
   onStuck: (id: string, stuck: boolean) => Promise<void>;
 }) {
@@ -121,6 +126,7 @@ function FollowUpItem({
         placeholder="接着答。答不上来就点下面那个按钮——那比硬编一个答案有用得多。"
         className="w-full mt-1.5 px-2.5 py-1.5 text-[12.5px] leading-relaxed border border-stone-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-y"
       />
+      {recordingKey && <RecordingPanel key={recordingKey} questionKey={recordingKey} />}
       <div className="flex items-center gap-2 mt-1">
         <span className="text-[10px] text-stone-400 mr-auto">
           {saving ? (

@@ -43,5 +43,8 @@ next-env.d.ts
 # Windows reserved filename
 nul
 
+# Private interview audio and metadata: never commit or publish.
+/.local/
+
 # auto-commit script log
 /scripts/auto-commit.log

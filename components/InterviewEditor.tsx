@@ -24,6 +24,7 @@ import {
 import { TodayPicker } from './interview/TodayPicker';
 import { UnitRecord } from './interview/UnitRecord';
 import { TaskNote } from './interview/TaskNote';
+import { RecordingPanel } from './interview/RecordingPanel';
 import { AddProblem } from './interview/AddProblem';
 import { TopicDivider } from './interview/TopicDivider';
 import { ResumeSnippet } from './interview/ResumeSnippet';
@@ -628,6 +629,7 @@ function BlockRow({
 } & Handlers) {
   if (block.kind === 'task') {
     const name = taskName(block.label);
+    const behavioralItem = name === '行为故事' ? itemsByTask[name] : undefined;
     return (
       <div className="py-3">
         <p
@@ -657,6 +659,7 @@ function BlockRow({
           problemItem={problemItem}
           onChange={(s, t) => onToggleTaskStatus(dateStr, blockIdx, s, t)}
         />
+        {behavioralItem && <RecordingPanel key={behavioralItem} questionKey={`behavioral:${behavioralItem}`} />}
         {notesBlockIdx >= 0 && (
           <TaskNote
             value={noteValue}
@@ -771,14 +774,16 @@ function BlockRow({
                 history={qhistory}
               />
             ) : (
+              <div key={unitIdx}>
               <UnitRecord
-                key={unitIdx}
                 {...common}
                 problemTopic={problemTopic}
                 problemItem={problemItem}
                 attempts={attempts}
                 problemUrl={links.problems}
               />
+              {name === '行为故事' && boundItem && <RecordingPanel key={boundItem} questionKey={`behavioral:${boundItem}`} />}
+              </div>
             );
           })}
         </div>

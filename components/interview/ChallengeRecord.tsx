@@ -12,6 +12,7 @@ import {
 import { UnitStatus } from '@/types/interview';
 import { AttemptHistory } from './AttemptHistory';
 import { FollowUpChain } from './FollowUpChain';
+import { RecordingPanel } from './RecordingPanel';
 
 /**
  * One resume challenge in a day's log.
@@ -254,6 +255,7 @@ export function ChallengeRecord({
 
           <FollowUpChain
             items={rec?.followUps ?? []}
+            recordingPrefix={`resume:${q.storyId}:${q.id}`}
             onSave={(followUpId, followUpAnswer) =>
               write({ followUpId, followUpAnswer })
             }
@@ -272,7 +274,7 @@ export function ChallengeRecord({
               }`}
             >
               <Mic className="w-3 h-3" />
-              {st === 'spoken' ? '已能脱口而出' : '录音口述过了'}
+              {st === 'spoken' ? '已能脱口而出' : '已能不看稿讲述'}
             </button>
             <button
               type="button"
@@ -289,6 +291,7 @@ export function ChallengeRecord({
           </div>
         </div>
       )}
+      {q && <div className="px-3 pb-2"><RecordingPanel key={`${q.storyId}:${q.id}`} questionKey={`resume:${q.storyId}:${q.id}`} /></div>}
     </div>
   );
 }
