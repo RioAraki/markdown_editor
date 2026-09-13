@@ -204,46 +204,54 @@ export function InterviewEditor() {
   useEffect(() => {
     fetch('/api/interview/tasklinks')
       .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then(setLinks)
+      .then((data: typeof links) => setLinks(previous => ({ ...data, problems: { ...data.problems, ...previous.problems } })))
       .catch(() => {});
   }, []);
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/interview/leetcode')
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((d: {
-        bank: { problems: { id: number; item: string | null }[] };
-        topics: Record<string, string>;
-        log: Record<string, { attempts: { date: string; outcome: string; note?: string }[] }>;
-      }) => {
-        if (cancelled) return;
-        const m: Record<number, string> = {};
-        const items: Record<number, string> = {};
-        for (const p of d.bank.problems) {
-          if (!p.item) continue;
-          items[p.id] = p.item;
-          if (d.topics[p.item]) m[p.id] = d.topics[p.item];
-        }
-        setProblemTopic(m);
-        setProblemItem(items);
-        setTopicName(d.topics ?? {});
+    let revision = 0;
+    const load = () => {
+      const requested = ++revision;
+      fetch('/api/interview/leetcode')
+        .then((r) => (r.ok ? r.json() : Promise.reject()))
+        .then((d: {
+          bank: { problems: { id: number; item: string | null; url: string }[] };
+          topics: Record<string, string>;
+          log: Record<string, { attempts: { date: string; outcome: string; note?: string }[] }>;
+        }) => {
+          if (cancelled || requested !== revision) return;
+          setLinks(previous => ({ ...previous, problems: Object.fromEntries(d.bank.problems.map(p => [p.id, p.url])) }));
+          const m: Record<number, string> = {};
+          const items: Record<number, string> = {};
+          for (const p of d.bank.problems) {
+            if (!p.item) continue;
+            items[p.id] = p.item;
+            if (d.topics[p.item]) m[p.id] = d.topics[p.item];
+          }
+          setProblemTopic(m);
+          setProblemItem(items);
+          setTopicName(d.topics ?? {});
 
-        const hist: Record<number, AttemptEntry[]> = {};
-        for (const [pid, rec] of Object.entries(d.log ?? {})) {
-          const rows = (rec.attempts ?? [])
-            .filter((a) => a.note || a.outcome !== 'unknown')
-            .map((a) => ({
-              date: a.date,
-              verdict: OUTCOME_LABEL[a.outcome as keyof typeof OUTCOME_LABEL],
-              tone: OUTCOME_TONE_CHIP[a.outcome] ?? undefined,
-              text: a.note,
-            }));
-          if (rows.length > 0) hist[Number(pid)] = rows;
-        }
-        setAttempts(hist);
-      })
-      .catch(() => {});
+          const hist: Record<number, AttemptEntry[]> = {};
+          for (const [pid, rec] of Object.entries(d.log ?? {})) {
+            const rows = (rec.attempts ?? [])
+              .filter((a) => a.note || a.outcome !== 'unknown')
+              .map((a) => ({
+                date: a.date,
+                verdict: OUTCOME_LABEL[a.outcome as keyof typeof OUTCOME_LABEL],
+                tone: OUTCOME_TONE_CHIP[a.outcome] ?? undefined,
+                text: a.note,
+              }));
+            if (rows.length > 0) hist[Number(pid)] = rows;
+          }
+          setAttempts(hist);
+        })
+        .catch(() => {});
+    };
+    load();
+    window.addEventListener('interview:leetcode-updated', load);
     return () => {
+      window.removeEventListener('interview:leetcode-updated', load);
       cancelled = true;
     };
   }, []);

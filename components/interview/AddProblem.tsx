@@ -5,6 +5,7 @@ import { Loader2, Plus } from 'lucide-react';
 import { parseProblemUnit } from '@shared/interview/leetcode';
 import { TaskUnit } from '@/types/interview';
 import { useInterview } from '@/contexts/InterviewContext';
+import { DeclareProblem } from './DeclareProblem';
 
 /**
  * "今天还有时间，再来一题".
@@ -27,10 +28,12 @@ export function AddProblem({
 }) {
   const { days } = useInterview();
   const [busy, setBusy] = useState(false);
+  const [declaring, setDeclaring] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [why, setWhy] = useState<string | null>(null);
 
   const pick = async () => {
+    if (busy || declaring) return;
     setBusy(true);
     setError(null);
     setWhy(null);
@@ -70,7 +73,7 @@ export function AddProblem({
       <button
         type="button"
         onClick={pick}
-        disabled={busy}
+        disabled={busy || declaring}
         className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-50 transition-colors"
         title="接着今天的两新一旧顺序加题；老题只选已标记待重做的题"
       >
@@ -81,6 +84,7 @@ export function AddProblem({
         )}
         再来一题
       </button>
+      <DeclareProblem dateStr={dateStr} units={units} onAdd={onAdd} disabled={busy} onBusyChange={setDeclaring} />
       {error && <span className="text-[11px] text-red-600">{error}</span>}
       {why && !error && (
         <span className="text-[11px] text-stone-500">{why}</span>
