@@ -5,6 +5,7 @@ import {
   loadLeetCode,
   loadQBank,
   loadStories,
+  loadResume,
   loadTopicNotes,
 } from '@shared/interview/load';
 
@@ -21,14 +22,15 @@ const DATA_DIR = path.dirname(
 
 export async function GET() {
   try {
-    const [plan, leetcode, qbank, notes, stories] = await Promise.all([
+    const [plan, leetcode, qbank, notes, stories, resume] = await Promise.all([
       loadInterviewPlan(DATA_DIR),
       loadLeetCode(DATA_DIR),
       loadQBank(DATA_DIR),
       loadTopicNotes(DATA_DIR),
       loadStories(DATA_DIR),
+      loadResume(DATA_DIR),
     ]);
-    return NextResponse.json({ plan, leetcode, qbank, notes, stories });
+    return NextResponse.json({ plan, leetcode, qbank, notes, stories, resume });
   } catch (error) {
     console.error('Error in GET /api/interview/overview:', error);
     return NextResponse.json(

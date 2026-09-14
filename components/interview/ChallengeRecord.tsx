@@ -8,11 +8,13 @@ import {
   STATUS_LABEL,
   StoryAnswer,
   StoryQuestion,
+  followUpPending,
 } from '@shared/interview/stories';
 import { UnitStatus } from '@/types/interview';
 import { AttemptHistory } from './AttemptHistory';
 import { FollowUpChain } from './FollowUpChain';
 import { RecordingPanel } from './RecordingPanel';
+import type { Resume } from '@shared/interview/resume';
 
 /**
  * One resume challenge in a day's log.
@@ -53,6 +55,7 @@ export function ChallengeRecord({
   trailing,
   meta,
   saved,
+  resume,
   onChange,
 }: {
   index: number;
@@ -63,6 +66,7 @@ export function ChallengeRecord({
   meta?: Record<string, ChallengeMeta>;
   /** questionId → what the story file already holds. */
   saved?: Record<string, StoryAnswer>;
+  resume?: Resume;
   onChange: (status: UnitStatus, trailing: string) => void;
 }) {
   const id = /^\[([a-z]{2}-[a-z]+-\d+)\]/.exec(trailing.trim())?.[1];
@@ -81,6 +85,7 @@ export function ChallengeRecord({
   const latestText = useRef('');
   const writes = useRef<Promise<void>>(Promise.resolve());
   const [saveError, setSaveError] = useState('');
+  const answerBox = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (!dirty.current) { latestText.current = rec?.answer ?? ''; setText(latestText.current); }
@@ -174,8 +179,8 @@ export function ChallengeRecord({
             <span className="text-stone-400">{STATUS_LABEL[st]}</span>
             {(rec?.followUps?.length ?? 0) > 0 && (
               <span className="ml-1 text-indigo-600">
-                · 追问 {rec?.followUps?.filter((f) => !f.answer).length ?? 0}/
-                {rec?.followUps?.length}
+                · 追问待准备 {rec?.followUps?.filter(followUpPending).length ?? 0}/
+                {rec?.followUps?.filter(f => !f.deleted).length}
               </span>
             )}
             {rec?.gaps?.[0] && (
@@ -247,6 +252,7 @@ export function ChallengeRecord({
               </span>
             </div>
             <textarea
+              ref={answerBox}
               value={text}
               onChange={(e) => {
                 dirty.current = true;
@@ -261,15 +267,6 @@ export function ChallengeRecord({
               className="w-full px-3 py-2 text-[13px] leading-relaxed border border-stone-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-y"
             />
           </div>
-
-          <FollowUpChain
-            items={rec?.followUps ?? []}
-            recordingPrefix={`resume:${q.storyId}:${q.id}`}
-            onSave={(followUpId, followUpAnswer) =>
-              write({ followUpId, followUpAnswer })
-            }
-            onStuck={(followUpId, stuck) => write({ followUpId, stuck })}
-          />
 
           {saveError && <p role="alert" className="text-xs text-rose-700">{saveError}</p>}
           <div className="flex items-center gap-2 flex-wrap">
@@ -308,6 +305,14 @@ export function ChallengeRecord({
         </div>
       )}
       {q && <div className="px-3 pb-2"><RecordingPanel key={`${q.storyId}:${q.id}`} questionKey={`resume:${q.storyId}:${q.id}`} /></div>}
+      {open && q && <div className="px-3 pb-3"><FollowUpChain
+        key={`${q.storyId}:${q.id}`}
+        items={rec?.followUps ?? []}
+        storyId={q.storyId} questionId={q.id}
+        recordingPrefix={`resume:${q.storyId}:${q.id}`}
+        getContext={() => ({ question: q.q, answer: latestText.current, storyTitle: q.storyTitle, clusterTitle: q.clusterTitle, resume, resumeAnchor: q.resumeAnchor, tests: q.tests, gaps: rec?.gaps, revisions: rec?.revisions })}
+        getQuote={() => { const box = answerBox.current; return box ? box.value.slice(box.selectionStart, box.selectionEnd) : ''; }}
+      /></div>}
     </div>
   );
 }

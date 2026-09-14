@@ -133,7 +133,7 @@ export function InterviewEditor() {
                 storyId: st.id,
                 storyTitle: st.title,
                 clusterTitle: c.title,
-                resumeAnchor: c.resumeAnchor,
+                resumeAnchor: c.resumeAnchor ?? st.resumeAnchor,
               };
             }
           }
@@ -770,6 +770,7 @@ function BlockRow({
                   {...common}
                   meta={cmeta}
                   saved={canswers}
+                  resume={resume}
                 />
               );
             }

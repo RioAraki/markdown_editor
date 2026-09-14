@@ -27,8 +27,10 @@ import { useInterview } from '@/contexts/InterviewContext';
 import { serializeInterviewDayDoc } from '@/lib/interviewParser';
 import { getTodayDate } from '@/lib/dateUtils';
 import { InterviewAnswerReview } from './InterviewAnswerReview';
+import type { Resume } from '@shared/interview/resume';
 
 interface Bundle {
+  resume?: Resume;
   plan: InterviewPlan;
   notes?: Record<string, { body: string; updated?: string }>;
   qbank: { bank: QuestionBank; log: QBankLog };
@@ -280,7 +282,7 @@ export function OverviewPane() {
         weekTracks={model.weekTracks}
         notes={bundle?.notes}
         renderItemDetail={item => (item.item.id.startsWith('bh-') || bundle?.stories?.bank.stories.some(story => story.clusters.some(cluster => cluster.id === item.item.id)))
-          ? <InterviewAnswerReview itemId={item.item.id} stories={bundle?.stories} days={days} /> : null}
+          ? <InterviewAnswerReview itemId={item.item.id} stories={bundle?.stories} resume={bundle?.resume} days={days} /> : null}
       />
     </div>
   );
