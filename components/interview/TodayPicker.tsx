@@ -41,6 +41,8 @@ function TopUp({
   busy,
   error,
   ready,
+  loading,
+  onRetry,
 }: {
   missing: BlockLite[];
   chosen: string[];
@@ -49,6 +51,8 @@ function TopUp({
   busy: boolean;
   error: string | null;
   ready: boolean;
+  loading: boolean;
+  onRetry?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -116,10 +120,11 @@ function TopUp({
               {busy && <Loader2 className="w-3 h-3 animate-spin" />}
               加进来
             </button>
-            {chosen.length > 0 && !ready && (
+            {chosen.length > 0 && loading && (
               <span className="text-[11px] text-stone-400">正在排题…</span>
             )}
             {error && <span className="text-[11px] text-red-600">{error}</span>}
+            {onRetry && <button type="button" onClick={onRetry} className="text-xs text-indigo-700">重试排题</button>}
           </div>
         </div>
       )}
@@ -128,7 +133,7 @@ function TopUp({
 }
 
 export function TodayPicker() {
-  const { days, refresh } = useInterview();
+  const { days, refresh, isLoading } = useInterview();
   const today = getTodayDate();
   const todayExists = days.some((d) => d.dateStr === today);
 
@@ -142,58 +147,93 @@ export function TodayPicker() {
   const [swapping, setSwapping] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [menuError, setMenuError] = useState<string | null>(null);
+  const [planError, setPlanError] = useState<string | null>(null);
+  const [menuAttempt, setMenuAttempt] = useState(0);
+  const [planAttempt, setPlanAttempt] = useState(0);
+  const [resultKey, setResultKey] = useState<string | null>(null);
+  const [initializedDate, setInitializedDate] = useState<string | null>(null);
+  // Another tab can add blocks while this picker stays mounted. Exclude those
+  // choices immediately, including the render before state reconciliation.
+  const already = new Set(
+    (days.find((d) => d.dateStr === today)?.blocks ?? [])
+      .map((b) => ('label' in b ? b.label : ''))
+      .map((l: string) => (l.split('·')[0] ?? '').trim())
+      .filter(Boolean),
+  );
+  const missing = (menu?.blocks ?? []).filter((b) => !already.has(b.name));
+  const missingIds = new Set(missing.map((b) => b.id));
+  const availableSelection = todayExists
+    ? chosenBlocks.filter((id) => missingIds.has(id))
+    : chosenBlocks;
+  const selectionValid = availableSelection.length === chosenBlocks.length;
+  const availableSelectionKey = JSON.stringify(availableSelection);
+  const selectionKey = JSON.stringify([today, todayExists, chosenBlocks, planAttempt]);
+  const selectionInitialized = initializedDate === today;
+  const ready = !isLoading && selectionInitialized && selectionValid && !!data && resultKey === selectionKey;
+  const loading = !!menu && chosenBlocks.length > 0 && !ready && !planError;
 
   useEffect(() => {
-    let cancelled = false;
-    fetch('/api/interview/blocks')
+    const controller = new AbortController();
+    setMenuError(null);
+    fetch('/api/interview/blocks', { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((d: BlocksResponse) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         setMenu(d);
-        // Topping up starts from an empty selection: the required blocks may
-        // already be in the day, and pre-checking them would offer to add
-        // what is there.
-        setChosenBlocks((cur) =>
-          cur.length
-            ? cur
-            : todayExists
-              ? []
-              : d.blocks.filter((b) => b.required).map((b) => b.id),
-        );
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!controller.signal.aborted) setMenuError('时段清单加载失败，请重试');
+      });
     return () => {
-      cancelled = true;
+      controller.abort();
     };
-  }, [todayExists]);
+  }, [today, menuAttempt]);
+
+  // Fetch the menu alongside the day list, but only select defaults once we
+  // know whether today already exists. Refreshes must preserve manual choices.
+  useEffect(() => {
+    if (isLoading || !menu || selectionInitialized) return;
+    setChosenBlocks(todayExists ? [] : menu.blocks.filter((b) => b.required).map((b) => b.id));
+    setInitializedDate(today);
+  }, [isLoading, menu, selectionInitialized, todayExists, today]);
+
+  useEffect(() => {
+    if (isLoading || !menu || !todayExists || selectionValid) return;
+    setChosenBlocks(JSON.parse(availableSelectionKey) as string[]);
+  }, [isLoading, menu, todayExists, selectionValid, availableSelectionKey]);
 
   // Re-plan whenever the composition changes: which problems and questions get
   // picked depends on which blocks are in the day.
   useEffect(() => {
-    if (todayExists && chosenBlocks.length === 0) {
-      setData(null);
-      return;
-    }
-    let cancelled = false;
-    const qs = chosenBlocks.length ? `?blocks=${chosenBlocks.join(',')}` : '';
-    fetch(`/api/interview/today${qs}`)
+    setData(null);
+    setResultKey(null);
+    setPlanError(null);
+    setSwapping(null);
+    if (isLoading || !selectionInitialized || !selectionValid || !menu || chosenBlocks.length === 0) return;
+    const controller = new AbortController();
+    const qs = `?blocks=${chosenBlocks.map(encodeURIComponent).join(',')}`;
+    fetch(`/api/interview/today${qs}`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((d: TodayPlanResponse) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         setData(d);
+        setResultKey(selectionKey);
         const init: Record<string, string> = {};
         for (const [task, item] of Object.entries(d.suggestedItems ?? {})) {
           init[task] = item.id;
         }
         setPicked(init);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!controller.signal.aborted) setPlanError('排题失败，请重试');
+      });
     return () => {
-      cancelled = true;
+      controller.abort();
     };
-  }, [todayExists, chosenBlocks]);
+  }, [isLoading, selectionInitialized, selectionValid, menu, selectionKey]);
 
-  const chosen: PlanDayLite | undefined = data?.suggestion;
+  const chosen: PlanDayLite | undefined = ready ? data?.suggestion : undefined;
 
   // Look up any item by id, including ones swapped in manually.
   const choiceById = useMemo(() => {
@@ -212,17 +252,9 @@ export function TodayPicker() {
     return m;
   }, [data]);
 
-  // Blocks the day already has — offering them again would duplicate work.
-  const already = new Set(
-    (days.find((d) => d.dateStr === today)?.blocks ?? [])
-      .map((b) => ('label' in b ? b.label : ''))
-      .map((l: string) => (l.split('·')[0] ?? '').trim())
-      .filter(Boolean),
-  );
-
   // Both the initial picker and TopUp need this handler before either returns.
   const create = async (append = false) => {
-    if (!data) return;
+    if (!data || !ready || chosenBlocks.length === 0 || creating) return;
     setCreating(true);
     setError(null);
     try {
@@ -264,23 +296,36 @@ export function TodayPicker() {
     }
   };
 
+  if (!menu) {
+    return (
+      <section className="bg-white rounded-lg border border-stone-200 p-4 text-sm text-stone-500" aria-live="polite">
+        {menuError ? (
+          <><span role="alert">{menuError}</span><button type="button" onClick={() => setMenuAttempt((n) => n + 1)} className="ml-2 text-indigo-700">重试</button></>
+        ) : <span className="inline-flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />正在加载今天的时段清单…</span>}
+      </section>
+    );
+  }
+
+  if (isLoading || !selectionInitialized) {
+    return <section role="status" className="bg-white rounded-lg border border-stone-200 p-4 text-sm text-stone-500">正在加载今天的记录…</section>;
+  }
+
   if (todayExists) {
-    const missing = (menu?.blocks ?? []).filter((b) => !already.has(b.name));
     if (missing.length === 0) return null;
     return (
       <TopUp
         missing={missing}
-        chosen={chosenBlocks}
+        chosen={availableSelection}
         setChosen={setChosenBlocks}
         onAdd={() => void create(true)}
         busy={creating}
-        error={error}
-        ready={!!data}
+        error={error ?? planError}
+        ready={ready}
+        loading={loading}
+        onRetry={planError ? () => setPlanAttempt((n) => n + 1) : undefined}
       />
     );
   }
-
-  if (!data) return null;
 
   if (!chosen && (menu?.blocks.length ?? 0) === 0) {
     return (
@@ -300,7 +345,7 @@ export function TodayPicker() {
         <h3 className="text-[15px] font-semibold text-stone-800">今天做什么?</h3>
         <p className="text-xs text-stone-500 mt-0.5">
           {today} 还没有记录
-          {data.week && ` · W${data.week.n} ${data.week.theme}`}
+          {data?.week && ` · W${data.week.n} ${data.week.theme}`}
         </p>
         {menu && missingRequired(menu, chosenBlocks).length > 0 && (
           <p className="text-[11px] text-amber-700 mt-1">
@@ -314,7 +359,11 @@ export function TodayPicker() {
       </header>
 
       <div className="p-4 space-y-3">
-        {chosen?.tasks && chosen.tasks.length > 0 ? (
+        {loading ? (
+          <p role="status" className="inline-flex items-center gap-2 text-sm text-stone-500"><Loader2 className="w-4 h-4 animate-spin" />正在排题…</p>
+        ) : planError ? (
+          <p role="alert" className="text-sm text-red-600">{planError}<button type="button" onClick={() => setPlanAttempt((n) => n + 1)} className="ml-2 text-indigo-700">重试</button></p>
+        ) : data && chosen?.tasks && chosen.tasks.length > 0 ? (
           <>
             <p className="text-xs text-stone-500">
               下面每项的具体内容都是自动挑的，也都能换。
@@ -432,7 +481,7 @@ export function TodayPicker() {
         <div className="flex items-center gap-3 pt-1">
           <button
             onClick={() => void create()}
-            disabled={chosenBlocks.length === 0 || creating}
+            disabled={chosenBlocks.length === 0 || creating || !ready}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
           >
             {creating ? (

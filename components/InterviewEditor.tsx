@@ -371,7 +371,7 @@ export function InterviewEditor() {
                 Loading...
               </div>
             )}
-            {!isLoading && selectedDate === today && <TodayPicker />}
+            {selectedDate === today && <TodayPicker />}
             {!isLoading && !shownDay && selectedDate !== today && (
               <div className="bg-white rounded-lg border border-stone-200 p-6 text-center">
                 <p className="text-sm text-stone-500">
