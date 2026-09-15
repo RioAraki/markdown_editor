@@ -1,4 +1,4 @@
-import fs from 'fs';
+import { guardedFs as fs } from '@/lib/guardedFs';
 import path from 'path';
 
 export interface ArchiveFrontmatter {

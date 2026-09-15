@@ -1,12 +1,10 @@
+import { resolveServerPaths } from '@/lib/serverPaths';
 import { NextResponse } from 'next/server';
-import path from 'path';
 import { format } from 'date-fns';
 import { loadInterviewPlan } from '@shared/interview/load';
 import { blockStatuses } from '@shared/interview/core';
 
-const DATA_DIR = path.dirname(
-  process.env.INTERVIEW_LOG_PATH || 'D:\\diary\\data\\interview\\log',
-);
+const DATA_DIR = resolveServerPaths().interviewData;
 
 /**
  * The menu you assemble a day from: every block, plus how long it has been

@@ -1,4 +1,6 @@
-import fs from 'fs/promises';
+import { atomicWriteFile } from '@/lib/atomicFile';
+import { resolveServerPaths } from '@/lib/serverPaths';
+import { guardedPromises as fs } from '@/lib/guardedFs';
 import path from 'path';
 import { DiaryEntry } from '@/types/diary';
 import {
@@ -8,7 +10,7 @@ import {
   isPublicDiaryFilename,
 } from './dateUtils';
 
-const DIARY_PATH = process.env.DIARY_DATA_PATH || 'D:\\diary\\data\\diary';
+const DIARY_PATH = resolveServerPaths().diary;
 
 /**
  * Validate that a path is within the allowed diary directory
@@ -126,7 +128,7 @@ export async function writeDiaryFile(date: string, content: string): Promise<str
     await fs.mkdir(DIARY_PATH, { recursive: true });
 
     // Write the file with UTF-8 encoding
-    await fs.writeFile(filePath, content, 'utf-8');
+    await atomicWriteFile(filePath, content, 'utf-8');
 
     return filename;
   } catch (error) {

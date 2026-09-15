@@ -1,13 +1,12 @@
+import { resolveServerPaths } from '@/lib/serverPaths';
 import { NextResponse } from 'next/server';
-import fs from 'fs/promises';
+import { guardedPromises as fs } from '@/lib/guardedFs';
 import path from 'path';
 import { loadQBank } from '@shared/interview/load';
 import { questionKey } from '@shared/interview/qbank';
 import type { Question, QuestionBank } from '@shared/interview/qbank';
 
-const DATA_DIR = path.dirname(
-  process.env.INTERVIEW_LOG_PATH || 'D:\\diary\\data\\interview\\log',
-);
+const DATA_DIR = resolveServerPaths().interviewData;
 const BANK_PATH = path.join(DATA_DIR, 'agent-qbank.json');
 const SITE =
   process.env.QBANK_SITE || 'https://1oxo1zqi.sc.monkeycode-ai.online/';

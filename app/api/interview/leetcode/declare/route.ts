@@ -1,5 +1,6 @@
+import { resolveServerPaths } from '@/lib/serverPaths';
 import { NextResponse } from 'next/server';
-import fs from 'node:fs/promises';
+import { guardedPromises as fs } from '@/lib/guardedFs';
 import path from 'node:path';
 import { isValid, parseISO } from 'date-fns';
 import { loadLeetCode } from '@shared/interview/load';
@@ -8,7 +9,7 @@ import { dayProblemIds, problemUnitText } from '@shared/interview/leetcode';
 import { DeclareProblemError, resolveLeetCode, saveDeclaredProblem } from '@/lib/declareLeetCode';
 
 export const runtime = 'nodejs';
-const DATA_DIR = path.dirname(process.env.INTERVIEW_LOG_PATH || 'D:\\diary\\data\\interview\\log');
+const DATA_DIR = resolveServerPaths().interviewData;
 
 export async function POST(req: Request) {
   try {

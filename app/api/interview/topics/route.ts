@@ -1,5 +1,6 @@
+import { resolveServerPaths } from '@/lib/serverPaths';
 import { NextResponse } from 'next/server';
-import fs from 'fs/promises';
+import { guardedPromises as fs } from '@/lib/guardedFs';
 import path from 'path';
 import { format } from 'date-fns';
 import { loadTopicNotes } from '@shared/interview/load';
@@ -8,9 +9,7 @@ import {
   serializeTopicNote,
 } from '@shared/interview/topicNotes';
 
-const DATA_DIR = path.dirname(
-  process.env.INTERVIEW_LOG_PATH || 'D:\\diary\\data\\interview\\log',
-);
+const DATA_DIR = resolveServerPaths().interviewData;
 const TOPICS_DIR = path.join(DATA_DIR, 'topics');
 
 /** All 要领 notes, keyed by inventory item id. */

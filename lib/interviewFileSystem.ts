@@ -1,9 +1,10 @@
-import fs from 'fs/promises';
+import { atomicWriteFile } from '@/lib/atomicFile';
+import { resolveServerPaths } from '@/lib/serverPaths';
+import { guardedPromises as fs } from '@/lib/guardedFs';
 import path from 'path';
 import { InterviewDayListItem, InterviewDayMeta } from '@/types/interview';
 
-const INTERVIEW_LOG_PATH =
-  process.env.INTERVIEW_LOG_PATH || 'D:\\diary\\data\\interview\\log';
+const INTERVIEW_LOG_PATH = resolveServerPaths().interviewLog;
 
 const DAY_FILENAME_RE = /^(\d{4}-\d{2}-\d{2})\.md$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -77,7 +78,7 @@ export async function writeInterviewDay(
   } catch {
     throw new Error('Interview day not found');
   }
-  await fs.writeFile(filePath, content, 'utf-8');
+  await atomicWriteFile(filePath, content, 'utf-8');
 }
 
 export async function createInterviewDay(
@@ -96,5 +97,5 @@ export async function createInterviewDay(
   }
   if (exists) throw new Error('Interview day already exists');
   await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, content, 'utf-8');
+  await atomicWriteFile(filePath, content, 'utf-8');
 }

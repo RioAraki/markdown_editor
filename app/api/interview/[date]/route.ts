@@ -1,3 +1,4 @@
+import { resolveServerPaths } from '@/lib/serverPaths';
 import { NextResponse } from 'next/server';
 import {
   createInterviewDay,
@@ -14,7 +15,7 @@ import {
 import { dayFromBlocks } from '@shared/interview/core';
 import { flattenInventory, loadInventory, loadMastery } from '@/lib/interviewInventory';
 import path from 'path';
-import fs from 'fs/promises';
+import { guardedPromises as fs } from '@/lib/guardedFs';
 import { loadLeetCode, loadQBank } from '@shared/interview/load';
 import { parseQuestionUnit, questionUnitText } from '@shared/interview/qbank';
 import { loadStories } from '@shared/interview/load';
@@ -41,9 +42,7 @@ type RouteContext = {
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-const DATA_DIR = path.dirname(
-  process.env.INTERVIEW_LOG_PATH || 'D:\\diary\\data\\interview\\log',
-);
+const DATA_DIR = resolveServerPaths().interviewData;
 
 export async function GET(_req: Request, context: RouteContext) {
   try {

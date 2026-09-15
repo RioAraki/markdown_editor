@@ -1,12 +1,10 @@
+import { resolveServerPaths } from '@/lib/serverPaths';
 import { NextResponse } from 'next/server';
-import path from 'path';
 import { format } from 'date-fns';
 import { loadQBank } from '@shared/interview/load';
 import { questionUnitText, recommendQuestions } from '@shared/interview/qbank';
 
-const DATA_DIR = path.dirname(
-  process.env.INTERVIEW_LOG_PATH || 'D:\\diary\\data\\interview\\log',
-);
+const DATA_DIR = resolveServerPaths().interviewData;
 
 /**
  * One more question, for a slot with time to spare.

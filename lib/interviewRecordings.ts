@@ -1,10 +1,11 @@
-import fs from 'node:fs/promises';
+import { resolveServerPaths } from '@/lib/serverPaths';
+import { guardedPromises as fs } from '@/lib/guardedFs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { InterviewRecording, RecordingEnhancement } from '@/types/recording';
 
 export const MAX_RECORDING_BYTES = 64 * 1024 * 1024;
-const ROOT = path.resolve(process.env.INTERVIEW_RECORDINGS_PATH || path.join(process.cwd(), '.local/interview-recordings'));
+const ROOT = resolveServerPaths().recordings;
 const KEY = /^(?:behavioral:[a-z0-9-]+|resume:[a-z0-9-]+:[a-z0-9-]+)$/;
 const ID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 

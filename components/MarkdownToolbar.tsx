@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 
 interface MarkdownToolbarProps {
-  textareaRef: React.RefObject<HTMLTextAreaElement>;
+  textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   onContentChange: (newContent: string) => void;
   content: string;
   // Action buttons

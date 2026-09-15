@@ -1,5 +1,6 @@
+import { resolveServerPaths } from '@/lib/serverPaths';
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs';
+import { guardedFs as fs } from '@/lib/guardedFs';
 import path from 'path';
 import {
   parseMarkdownWithFrontmatter,
@@ -10,7 +11,7 @@ import {
 } from '@/lib/archiveUtils';
 import { ArchiveItem } from '../route';
 
-const ARCHIVE_DIR = path.join('D:', 'diary', 'data', 'archive');
+const ARCHIVE_DIR = resolveServerPaths().archive;
 
 // GET - Get specific archive
 export async function GET(
@@ -19,6 +20,9 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+    if (!id || /[\\/:\x00]/.test(id) || id === '.' || id === '..') {
+      return NextResponse.json({ error: 'Invalid archive id' }, { status: 400 });
+    }
     const filePath = path.join(ARCHIVE_DIR, `${id}.md`);
 
     if (!fs.existsSync(filePath)) {
@@ -56,6 +60,9 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
+    if (!id || /[\\/:\x00]/.test(id) || id === '.' || id === '..') {
+      return NextResponse.json({ error: 'Invalid archive id' }, { status: 400 });
+    }
     const { title, content } = await request.json();
     const currentFilePath = path.join(ARCHIVE_DIR, `${id}.md`);
 
@@ -127,6 +134,9 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+    if (!id || /[\\/:\x00]/.test(id) || id === '.' || id === '..') {
+      return NextResponse.json({ error: 'Invalid archive id' }, { status: 400 });
+    }
     const filePath = path.join(ARCHIVE_DIR, `${id}.md`);
 
     if (!fs.existsSync(filePath)) {

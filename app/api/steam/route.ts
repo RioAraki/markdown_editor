@@ -1,8 +1,9 @@
+import { resolveServerPaths } from '@/lib/serverPaths';
 import { NextResponse } from 'next/server';
-import * as fs from 'fs';
+import { guardedFs as fs } from '@/lib/guardedFs';
 import * as path from 'path';
 
-const STEAM_EXPORT_DIR = 'D:\\diary\\data\\steam_export';
+const STEAM_EXPORT_DIR = resolveServerPaths().steamExport;
 
 export async function GET() {
   try {

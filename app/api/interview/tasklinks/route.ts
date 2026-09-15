@@ -1,11 +1,9 @@
+import { resolveServerPaths } from '@/lib/serverPaths';
 import { NextResponse } from 'next/server';
-import path from 'path';
 import { loadPlan } from '@/lib/interviewPlan';
 import { loadLeetCode } from '@shared/interview/load';
 
-const DATA_DIR = path.dirname(
-  process.env.INTERVIEW_LOG_PATH || 'D:\\diary\\data\\interview\\log',
-);
+const DATA_DIR = resolveServerPaths().interviewData;
 
 /**
  * Direct links for the day card: one per task name (题库站、LeetCode…) and one

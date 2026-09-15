@@ -1,5 +1,5 @@
+import { resolveServerPaths } from '@/lib/serverPaths';
 import { NextResponse } from 'next/server';
-import path from 'path';
 import { format, isValid, parseISO } from 'date-fns';
 import { loadInterviewPlan, loadLeetCode } from '@shared/interview/load';
 import {
@@ -9,9 +9,7 @@ import {
   recommendProblems,
 } from '@shared/interview/leetcode';
 
-const DATA_DIR = path.dirname(
-  process.env.INTERVIEW_LOG_PATH || 'D:\\diary\\data\\interview\\log',
-);
+const DATA_DIR = resolveServerPaths().interviewData;
 
 /** Continue the same two-new/one-review sequence as daily generation.
  * The saved day plus the client's unsaved IDs determine the whole-day ratio.

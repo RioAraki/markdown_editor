@@ -1,9 +1,16 @@
+import { atomicWriteFileSync } from '@/lib/atomicFile';
+import { allowExternalWrites, resolveServerPaths } from '@/lib/serverPaths';
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs';
+import { guardedFs as fs } from '@/lib/guardedFs';
 import path from 'path';
 
-const SHARE_TOKENS_PATH = path.join('D:', 'diary', 'data', 'share-tokens.json');
-const DIARY_DIR = path.join('D:', 'diary', 'data', 'diary');
+const SHARE_TOKENS_PATH = resolveServerPaths().shareTokens;
+const DIARY_DIR = resolveServerPaths().diary;
+
+function publicationDisabled() {
+  const isolated = process.env.EDITOR_PROFILE === 'development' || process.env.EDITOR_PROFILE === 'candidate';
+  return !isolated && !allowExternalWrites();
+}
 
 interface ShareToken {
   filename: string;
@@ -16,6 +23,9 @@ interface ShareTokensData {
 
 // Publish a diary entry
 export async function POST(request: NextRequest) {
+  if (publicationDisabled()) {
+    return NextResponse.json({ error: 'Publication is disabled for this instance.' }, { status: 403 });
+  }
   try {
     const { date, tokenId, description } = await request.json();
 
@@ -51,7 +61,7 @@ export async function POST(request: NextRequest) {
       const privateFilename = `${date}.md`;
       const error = fs.existsSync(path.join(DIARY_DIR, privateFilename))
         ? `${privateFilename} is a private entry and cannot be published. Rename it to ${filename} first.`
-        : `Diary file does not exist in D:\\diary\\data\\diary\\${filename}`;
+        : `Diary file does not exist: ${filename}`;
 
       return NextResponse.json({ error }, { status: 404 });
     }
@@ -77,7 +87,7 @@ export async function POST(request: NextRequest) {
     };
 
     // Write back to file
-    fs.writeFileSync(
+    atomicWriteFileSync(
       SHARE_TOKENS_PATH,
       JSON.stringify(shareTokensData, null, 2),
       'utf-8'
@@ -99,6 +109,9 @@ export async function POST(request: NextRequest) {
 
 // Unpublish a diary entry
 export async function DELETE(request: NextRequest) {
+  if (publicationDisabled()) {
+    return NextResponse.json({ error: 'Publication is disabled for this instance.' }, { status: 403 });
+  }
   try {
     const { date } = await request.json();
 
@@ -138,7 +151,7 @@ export async function DELETE(request: NextRequest) {
     delete shareTokensData.tokens[tokenToRemove];
 
     // Write back to file
-    fs.writeFileSync(
+    atomicWriteFileSync(
       SHARE_TOKENS_PATH,
       JSON.stringify(shareTokensData, null, 2),
       'utf-8'

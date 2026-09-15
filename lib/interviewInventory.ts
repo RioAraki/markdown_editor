@@ -1,4 +1,5 @@
-import fs from 'fs/promises';
+import { resolveServerPaths } from '@/lib/serverPaths';
+import { guardedPromises as fs } from '@/lib/guardedFs';
 import path from 'path';
 
 /**
@@ -9,13 +10,9 @@ import path from 'path';
  * beside it and is the one file this editor owns and writes.
  */
 
-const INTERVIEW_LOG_PATH =
-  process.env.INTERVIEW_LOG_PATH || 'D:\\diary\\data\\interview\\log';
-const DATA_DIR = path.dirname(INTERVIEW_LOG_PATH);
-const INVENTORY_PATH =
-  process.env.INTERVIEW_INVENTORY_PATH || path.join(DATA_DIR, 'inventory.json');
-const MASTERY_PATH =
-  process.env.INTERVIEW_MASTERY_PATH || path.join(DATA_DIR, 'mastery.json');
+const INTERVIEW_LOG_PATH = resolveServerPaths().interviewLog;
+const INVENTORY_PATH = resolveServerPaths().inventory;
+const MASTERY_PATH = resolveServerPaths().mastery;
 
 export interface InvItem {
   id: string;

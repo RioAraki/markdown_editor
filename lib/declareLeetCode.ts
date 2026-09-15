@@ -1,4 +1,4 @@
-import fs from 'node:fs/promises';
+import { guardedPromises as fs } from '@/lib/guardedFs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Problem, ProblemBank } from '@shared/interview/leetcode';

@@ -1,6 +1,6 @@
-import fs from 'fs/promises';
+import { resolveServerPaths } from '@/lib/serverPaths';
+import { guardedPromises as fs } from '@/lib/guardedFs';
 import type { PlanBlock } from '@shared/interview/types';
-import path from 'path';
 import { PlanDayLite, PlanTaskLite } from '@/types/interview';
 
 /**
@@ -12,11 +12,7 @@ import { PlanDayLite, PlanTaskLite } from '@/types/interview';
  * look like.
  */
 
-const INTERVIEW_LOG_PATH =
-  process.env.INTERVIEW_LOG_PATH || 'D:\\diary\\data\\interview\\log';
-const PLAN_PATH =
-  process.env.INTERVIEW_PLAN_PATH ||
-  path.join(path.dirname(INTERVIEW_LOG_PATH), 'plan.json');
+const PLAN_PATH = resolveServerPaths().interviewPlan;
 
 const WEEKDAYS_CN = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 

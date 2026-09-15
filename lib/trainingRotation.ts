@@ -1,4 +1,5 @@
-import fs from 'fs/promises';
+import { resolveServerPaths } from '@/lib/serverPaths';
+import { guardedPromises as fs } from '@/lib/guardedFs';
 import path from 'path';
 
 /**
@@ -9,11 +10,8 @@ import path from 'path';
  * (the suggestion), and materializes a chosen session into a dated log file.
  */
 
-const TRAINING_LOG_PATH =
-  process.env.TRAINING_LOG_PATH || 'D:\\diary\\data\\training\\log';
-const PLAN_PATH =
-  process.env.TRAINING_PLAN_PATH ||
-  path.join(path.dirname(TRAINING_LOG_PATH), 'plan.json');
+const TRAINING_LOG_PATH = resolveServerPaths().trainingLog;
+const PLAN_PATH = resolveServerPaths().trainingPlan;
 
 export interface RotationExercise {
   name: string;

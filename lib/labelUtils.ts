@@ -32,7 +32,7 @@ export function updateLabelsInMarkdown(
   withoutLabels = withoutLabels.replace(/\*\*Labels:\*\*[^\n]*\n?/g, '');
 
   // Also remove trailing metadata separator if it exists and no other metadata follows
-  withoutLabels = withoutLabels.replace(/\n---\n\n$/s, '');
+  withoutLabels = withoutLabels.replace(/\n---\n\n$/, '');
   withoutLabels = withoutLabels.trimEnd();
 
   // If no labels, return content without metadata

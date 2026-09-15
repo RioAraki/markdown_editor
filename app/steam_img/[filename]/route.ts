@@ -1,8 +1,9 @@
+import { resolveServerPaths } from '@/lib/serverPaths';
 import { NextRequest, NextResponse } from 'next/server';
-import * as fs from 'fs';
+import { guardedFs as fs } from '@/lib/guardedFs';
 import * as path from 'path';
 
-const STEAM_IMG_DIR = 'D:\\diary\\steam_img';
+const STEAM_IMG_DIR = resolveServerPaths().steamImages;
 
 export async function GET(
   request: NextRequest,

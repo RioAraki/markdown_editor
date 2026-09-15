@@ -1,8 +1,10 @@
+import { atomicWriteFileSync } from '@/lib/atomicFile';
+import { resolveServerPaths } from '@/lib/serverPaths';
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs';
+import { guardedFs as fs } from '@/lib/guardedFs';
 import path from 'path';
 
-const LABELS_CONFIG_PATH = path.join(process.cwd(), 'config', 'labels.json');
+const LABELS_CONFIG_PATH = resolveServerPaths().labels;
 
 export interface Label {
   id: string;
@@ -59,7 +61,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Write labels to file
-    fs.writeFileSync(
+    atomicWriteFileSync(
       LABELS_CONFIG_PATH,
       JSON.stringify(labels, null, 2),
       'utf-8'

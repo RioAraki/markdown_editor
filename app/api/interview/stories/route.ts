@@ -1,5 +1,6 @@
+import { resolveServerPaths } from '@/lib/serverPaths';
 import { NextResponse } from 'next/server';
-import fs from 'fs/promises';
+import { guardedPromises as fs } from '@/lib/guardedFs';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import { format } from 'date-fns';
@@ -18,9 +19,7 @@ import {
 import type { StoryDoc } from '@shared/interview/storyDoc';
 import { parseStoryDoc, serializeStoryDoc } from '@shared/interview/storyDoc';
 
-const DATA_DIR = path.dirname(
-  process.env.INTERVIEW_LOG_PATH || 'D:\\diary\\data\\interview\\log',
-);
+const DATA_DIR = resolveServerPaths().interviewData;
 const STORIES_DIR = path.join(DATA_DIR, 'stories');
 
 const STATUSES: AnswerStatus[] = ['todo', 'draft', 'flagged', 'spoken', 'struggled'];

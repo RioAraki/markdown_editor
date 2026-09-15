@@ -1,9 +1,10 @@
+import { resolveServerPaths } from '@/lib/serverPaths';
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs';
+import { guardedFs as fs } from '@/lib/guardedFs';
 import path from 'path';
 
-const SHARE_TOKENS_PATH = path.join('D:', 'diary', 'data', 'share-tokens.json');
-const DIARY_DIR = path.join('D:', 'diary', 'data', 'diary');
+const SHARE_TOKENS_PATH = resolveServerPaths().shareTokens;
+const DIARY_DIR = resolveServerPaths().diary;
 
 interface ShareToken {
   filename: string;

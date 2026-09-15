@@ -1,5 +1,6 @@
+import { resolveServerPaths } from '@/lib/serverPaths';
 import { NextResponse } from 'next/server';
-import fs from 'fs/promises';
+import { guardedPromises as fs } from '@/lib/guardedFs';
 import path from 'path';
 import { format } from 'date-fns';
 import { loadQBank } from '@shared/interview/load';
@@ -10,9 +11,7 @@ import {
   serializeQuestionDoc,
 } from '@shared/interview/qbankDoc';
 
-const DATA_DIR = path.dirname(
-  process.env.INTERVIEW_LOG_PATH || 'D:\\diary\\data\\interview\\log',
-);
+const DATA_DIR = resolveServerPaths().interviewData;
 const QBANK_DIR = path.join(DATA_DIR, 'qbank');
 
 const docPath = (id: string) => path.join(QBANK_DIR, `${id}.md`);

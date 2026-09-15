@@ -1,5 +1,5 @@
+import { resolveServerPaths } from '@/lib/serverPaths';
 import { NextResponse } from 'next/server';
-import path from 'path';
 import { format } from 'date-fns';
 import { loadPlan, resolveDayPlan, weekOf } from '@/lib/interviewPlan';
 import {
@@ -33,9 +33,7 @@ import {
 } from '@shared/interview/leetcode';
 import { TodayPlanResponse } from '@/types/interview';
 
-const DATA_DIR = path.dirname(
-  process.env.INTERVIEW_LOG_PATH || 'D:\\diary\\data\\interview\\log',
-);
+const DATA_DIR = resolveServerPaths().interviewData;
 
 export async function GET(req: Request) {
   try {

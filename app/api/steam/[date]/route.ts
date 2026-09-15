@@ -1,8 +1,9 @@
+import { resolveServerPaths } from '@/lib/serverPaths';
 import { NextRequest, NextResponse } from 'next/server';
-import * as fs from 'fs';
+import { guardedFs as fs } from '@/lib/guardedFs';
 import * as path from 'path';
 
-const STEAM_EXPORT_DIR = 'D:\\diary\\data\\steam_export';
+const STEAM_EXPORT_DIR = resolveServerPaths().steamExport;
 
 export async function GET(
   request: NextRequest,
@@ -10,6 +11,9 @@ export async function GET(
 ) {
   try {
     const { date } = await params;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return NextResponse.json({ error: 'Invalid Steam export date' }, { status: 400 });
+    }
     const filename = `steam_dashboard_${date}.json`;
     const filePath = path.join(STEAM_EXPORT_DIR, filename);
 
@@ -41,6 +45,9 @@ export async function PUT(
 ) {
   try {
     const { date } = await params;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return NextResponse.json({ error: 'Invalid Steam export date' }, { status: 400 });
+    }
     const filename = `steam_dashboard_${date}.json`;
     const filePath = path.join(STEAM_EXPORT_DIR, filename);
 

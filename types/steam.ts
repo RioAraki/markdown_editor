@@ -6,6 +6,8 @@ export interface SteamGame {
   img_icon_url: string;
   playtime_delta?: number;
   is_returning_game?: boolean;
+  trophy?: string;
+  comment?: string;
 }
 
 export interface SteamWeeklyActivity {

@@ -1,5 +1,7 @@
+import { atomicWriteFile } from '@/lib/atomicFile';
+import { allowExternalWrites, resolveServerPaths } from '@/lib/serverPaths';
 import { NextResponse } from 'next/server';
-import fs from 'fs/promises';
+import { guardedPromises as fs } from '@/lib/guardedFs';
 import path from 'path';
 import { loadLeetCode } from '@shared/interview/load';
 import {
@@ -8,11 +10,9 @@ import {
   REPO_REDO_NOTE,
 } from '@shared/interview/leetcode';
 
-const DATA_DIR = path.dirname(
-  process.env.INTERVIEW_LOG_PATH || 'D:\\diary\\data\\interview\\log',
-);
+const DATA_DIR = resolveServerPaths().interviewData;
 const LOG_PATH = path.join(DATA_DIR, 'leetcode-log.json');
-const REPO = process.env.LEETCODE_REPO || 'D:\\github\\leetcode2020';
+const REPO = resolveServerPaths().leetcodeRepo;
 
 /** `1143_redo_0.py` → 1143. Anything without a leading number is skipped. */
 function problemIdOf(filename: string): number | null {
@@ -49,6 +49,9 @@ async function findRedoFiles(dir: string, out: string[] = []): Promise<string[]>
  * touches an outcome. What you recorded here always wins over a filename.
  */
 export async function POST() {
+  if (!allowExternalWrites()) {
+    return NextResponse.json({ error: 'Repository sync is disabled for this instance (EDITOR_ALLOW_EXTERNAL_WRITES).' }, { status: 403 });
+  }
   try {
     const [{ bank, log }, files] = await Promise.all([
       loadLeetCode(DATA_DIR),
@@ -90,7 +93,7 @@ export async function POST() {
     }
 
     if (flagged.length > 0) {
-      await fs.writeFile(
+      await atomicWriteFile(
         LOG_PATH,
         JSON.stringify(store, null, 2) + '\n',
         'utf-8',

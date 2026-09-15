@@ -1,9 +1,10 @@
-import fs from 'fs/promises';
+import { atomicWriteFile } from '@/lib/atomicFile';
+import { resolveServerPaths } from '@/lib/serverPaths';
+import { guardedPromises as fs } from '@/lib/guardedFs';
 import path from 'path';
 import { TrainingDayListItem, TrainingDayMeta } from '@/types/training';
 
-const TRAINING_LOG_PATH =
-  process.env.TRAINING_LOG_PATH || 'D:\\diary\\data\\training\\log';
+const TRAINING_LOG_PATH = resolveServerPaths().trainingLog;
 
 const DAY_FILENAME_RE = /^(\d{4}-\d{2}-\d{2})\.md$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -76,7 +77,7 @@ export async function writeTrainingDay(
   } catch {
     throw new Error('Training day not found');
   }
-  await fs.writeFile(filePath, content, 'utf-8');
+  await atomicWriteFile(filePath, content, 'utf-8');
 }
 
 /**
@@ -98,5 +99,5 @@ export async function createTrainingDay(
     exists = false;
   }
   if (exists) throw new Error('Training day already exists');
-  await fs.writeFile(filePath, content, 'utf-8');
+  await atomicWriteFile(filePath, content, 'utf-8');
 }

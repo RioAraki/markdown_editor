@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createReadStream } from 'node:fs';
+import { createReadStream } from '@/lib/guardedFs';
 import { Readable } from 'node:stream';
 import { MAX_RECORDING_SECONDS } from '@/lib/recordingLimits';
 import {

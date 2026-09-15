@@ -1,9 +1,10 @@
+import { resolveServerPaths } from '@/lib/serverPaths';
 import { NextRequest, NextResponse } from 'next/server';
-import * as fs from 'fs';
+import { guardedFs as fs } from '@/lib/guardedFs';
 import * as path from 'path';
 
-const STEAM_EXPORT_DIR = 'D:\\diary\\data\\steam_export';
-const STEAM_IMG_DIR = 'D:\\diary\\steam_img';
+const STEAM_EXPORT_DIR = resolveServerPaths().steamExport;
+const STEAM_IMG_DIR = resolveServerPaths().steamImages;
 const STEAM_API_BASE = 'http://api.steampowered.com';
 const STEAM_CDN_BASE = 'http://media.steampowered.com/steamcommunity/public/images/apps';
 

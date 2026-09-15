@@ -1,5 +1,6 @@
+import { resolveServerPaths } from '@/lib/serverPaths';
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs';
+import { guardedFs as fs } from '@/lib/guardedFs';
 import path from 'path';
 import {
   parseMarkdownWithFrontmatter,
@@ -10,7 +11,7 @@ import {
   ArchiveFrontmatter,
 } from '@/lib/archiveUtils';
 
-const ARCHIVE_DIR = path.join('D:', 'diary', 'data', 'archive');
+const ARCHIVE_DIR = resolveServerPaths().archive;
 
 export interface ArchiveItem {
   id: string; // filename without .md extension
