@@ -1,11 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { STATUS_LABEL, followUpPending, type StoryAnswer, type StoryBank, type StoryAnswers, type StoryQuestion } from '@shared/interview/stories';
 import NoteBody from '@shared/interview/ui/NoteBody';
 import { behavioralHistory } from '@/lib/interviewAnswerHistory';
 import type { InterviewDayDoc } from '@/types/interview';
 import { RecordingPanel } from './RecordingPanel';
+import { CopyInterviewContext } from './CopyInterviewContext';
+import { interviewContext } from '@/lib/interviewContext';
 import { AttemptHistory } from './AttemptHistory';
 import { FollowUpChain } from './FollowUpChain';
 import type { Resume } from '@shared/interview/resume';
@@ -38,6 +40,8 @@ export function InterviewAnswerReview({ itemId, stories, days, resume }: {
 
 function ResumeAnswer({ storyId, storyTitle, clusterTitle, question, answer, resume, resumeAnchor }: { storyId: string; storyTitle: string; clusterTitle: string; question: StoryQuestion; answer?: StoryAnswer; resume?: Resume; resumeAnchor?: string }) {
   const [open, setOpen] = useState(false);
+  const contextTextRef = useRef<((focus?: 'main') => string) | null>(null);
+  const getContext = () => ({ question: question.q, answer: answer?.answer, storyTitle, clusterTitle, resume, resumeAnchor, tests: question.tests, gaps: answer?.gaps, revisions: answer?.revisions });
   const prefix = `resume:${storyId}:${question.id}`;
   return <div className="rounded border border-stone-200 bg-white overflow-hidden">
     <button type="button" aria-expanded={open} onClick={() => setOpen(value => !value)} className="w-full text-left p-2.5 text-xs leading-relaxed">
@@ -49,11 +53,12 @@ function ResumeAnswer({ storyId, storyTitle, clusterTitle, question, answer, res
       <div><p className="text-[10px] text-stone-400 mb-1">当前文字答案{answer?.date ? ` · ${answer.date}` : ''}</p>
         {answer?.answer ? <NoteBody body={answer.answer} /> : <p className="text-xs text-stone-400">尚未填写文字答案，可以查看下方录音。</p>}
       </div>
+      <CopyInterviewContext getText={() => contextTextRef.current?.('main') ?? interviewContext(getContext(), answer?.followUps ?? [], 'main')} />
       <AttemptHistory entries={(answer?.revisions ?? []).map(r => ({ date: r.date, text: r.text, verdict: r.grade, gaps: r.gaps }))} label="以前的文字版本" />
       {answer?.gaps?.length ? <div className="text-xs text-amber-700">{answer.gaps.map((gap, i) => <p key={i}>{gap}</p>)}</div> : null}
       <RecordingPanel questionKey={prefix} historyOnly />
       <FollowUpChain key={prefix} items={answer?.followUps ?? []} storyId={storyId} questionId={question.id} recordingPrefix={prefix}
-        getContext={() => ({ question: question.q, answer: answer?.answer, storyTitle, clusterTitle, resume, resumeAnchor, tests: question.tests, gaps: answer?.gaps, revisions: answer?.revisions })} />
+        getContext={getContext} contextTextRef={contextTextRef} />
     </div>}
   </div>;
 }

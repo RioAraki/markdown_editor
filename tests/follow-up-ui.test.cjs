@@ -72,11 +72,16 @@ test('an old successful answer save cannot clear a newer draft even when text ch
 });
 
 test('copy includes live drafts, hidden completed follow-ups and unsaved new questions',()=>{
-  const h=harness();const props={getContext:()=>({question:'原题',answer:'主答案草稿'}),items:[{id:'1',q:'旧追问',answer:'旧答案',status:'todo'},{id:'2',q:'已会讲述的追问',status:'spoken'},{id:'3',q:'已移除',deleted:true}]};
+  const contextTextRef={current:null};
+  const h=harness();const props={contextTextRef,getContext:()=>({question:'原题',answer:'主答案草稿'}),items:[{id:'1',q:'旧追问',answer:'旧答案',status:'todo'},{id:'2',q:'已会讲述的追问',status:'spoken'},{id:'3',q:'已移除',deleted:true}]};
   let tree=h.render(props);const child=nodes(tree).find(n=>n.props?.f?.id==='1');child.props.registerDraft('1',()=>({q:'编辑中的问题',answer:'编辑中的答案',quote:'来源草稿'}));
   find(tree,'select','筛选追问').props.onChange({target:{value:'pending'}});tree=h.render(props);
   find(tree,'button','＋ 记一个追问').props.onClick();tree=h.render(props);find(tree,'input','追问问题').props.onChange({target:{value:'还未提交的新追问'}});tree=h.render(props);
   const text=find(tree,'copy-context').props.getText();
   for(const value of ['原题','主答案草稿','编辑中的问题','编辑中的答案','来源草稿','已会讲述的追问','还未提交的新追问'])assert.ok(text.includes(value),value);
   assert.ok(!text.includes('已移除\n'));assert.ok(!text.includes('旧答案'));
+  const mainText=contextTextRef.current('main');
+  for(const value of ['原题','主答案草稿','编辑中的问题','编辑中的答案','来源草稿','已会讲述的追问','还未提交的新追问','本轮优先讨论原问题'])assert.ok(mainText.includes(value),value);
+  assert.ok(text.includes('优先处理我尚未准备好的追问'));
+  h.unmount();assert.equal(contextTextRef.current,null);
 });

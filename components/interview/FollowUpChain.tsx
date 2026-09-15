@@ -8,14 +8,16 @@ import { interviewContext, type InterviewContext } from '@/lib/interviewContext'
 
 const LABELS = { todo: '未准备', draft: '有初稿', struggled: '磕磕绊绊', spoken: '已能讲述', skipped: '暂不准备' };
 const button = 'text-[11px] px-2 py-1 rounded border border-stone-300 text-stone-600 bg-white hover:border-indigo-400 disabled:opacity-50';
-const field = 'w-full px-2.5 py-2 text-xs leading-relaxed border border-stone-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300';
+const field = 'w-full px-2.5 py-2 text-xs text-stone-800 placeholder:text-stone-400 leading-relaxed border border-stone-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300';
 type Patch = Record<string, unknown>;
 type Save = (patch: Patch) => Promise<void>;
 
 /** Shared question-owned editor for both the day card and overview. */
-export function FollowUpChain({ items, recordingPrefix, storyId, questionId, getQuote, getContext }: {
+export function FollowUpChain({ items, recordingPrefix, storyId, questionId, getQuote, getContext, contextTextRef }: {
   items: FollowUp[]; recordingPrefix: string; storyId: string; questionId: string; getQuote?: () => string;
   getContext?: () => InterviewContext;
+  /** Let the main answer's copy button use this same live draft snapshot. */
+  contextTextRef?: { current: ((focus?: 'main') => string) | null };
 }) {
   const [local, setLocal] = useState(items);
   const [adding, setAdding] = useState(false);
@@ -75,7 +77,7 @@ export function FollowUpChain({ items, recordingPrefix, storyId, questionId, get
   const active = local.filter(f => !f.deleted);
   const remaining = active.filter(followUpPending).length;
   const shown = local.filter(f => filter === 'removed' ? f.deleted : !f.deleted && (filter !== 'pending' || followUpPending(f)));
-  function contextText() {
+  function contextText(focus?: 'main') {
     const all = local.filter(f => !f.deleted).map(f => {
       const key = `interview-follow-up-draft:${recordingPrefix}-followup-${f.id.replaceAll('.', '-')}`;
       const answerDraft = draftRead(key);
@@ -84,8 +86,13 @@ export function FollowUpChain({ items, recordingPrefix, storyId, questionId, get
         ...(editDraft ? { q: editDraft.question, quote: editDraft.quote } : {}), ...snapshots.current.get(f.id)?.() };
     });
     if ((question.trim() || quote.trim()) && !all.some(f => f.id === createId.current)) all.push({ id: 'unsaved', q: question, quote, status: 'todo' });
-    return interviewContext(getContext?.() ?? { question: questionId }, all);
+    return interviewContext(getContext?.() ?? { question: questionId }, all, focus);
   }
+  useEffect(() => {
+    if (!contextTextRef) return;
+    contextTextRef.current = contextText;
+    return () => { if (contextTextRef.current === contextText) contextTextRef.current = null; };
+  }, [contextTextRef, contextText]);
   return <section className="mt-3 border-t border-stone-200 pt-3 space-y-2" aria-label="Follow Up 追问">
     <div className="flex items-center justify-between gap-2 flex-wrap">
       <span className="text-xs font-medium text-stone-700">Follow Up <span className="text-[11px] font-normal text-stone-400">{active.length} 条 · {remaining} 条待准备</span></span>

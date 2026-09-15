@@ -13,6 +13,8 @@ import {
 import { UnitStatus } from '@/types/interview';
 import { AttemptHistory } from './AttemptHistory';
 import { FollowUpChain } from './FollowUpChain';
+import { CopyInterviewContext } from './CopyInterviewContext';
+import { interviewContext } from '@/lib/interviewContext';
 import { RecordingPanel } from './RecordingPanel';
 import type { Resume } from '@shared/interview/resume';
 
@@ -86,6 +88,8 @@ export function ChallengeRecord({
   const writes = useRef<Promise<void>>(Promise.resolve());
   const [saveError, setSaveError] = useState('');
   const answerBox = useRef<HTMLTextAreaElement>(null);
+  const contextTextRef = useRef<((focus?: 'main') => string) | null>(null);
+  const getContext = () => ({ question: q?.q ?? trailing.trim(), answer: latestText.current, storyTitle: q?.storyTitle, clusterTitle: q?.clusterTitle, resume, resumeAnchor: q?.resumeAnchor, tests: q?.tests, gaps: rec?.gaps, revisions: rec?.revisions });
 
   useEffect(() => {
     if (!dirty.current) { latestText.current = rec?.answer ?? ''; setText(latestText.current); }
@@ -269,6 +273,7 @@ export function ChallengeRecord({
           </div>
 
           {saveError && <p role="alert" className="text-xs text-rose-700">{saveError}</p>}
+          <CopyInterviewContext getText={() => contextTextRef.current?.('main') ?? interviewContext(getContext(), rec?.followUps ?? [], 'main')} />
           <div className="flex items-center gap-2 flex-wrap">
             <button type="button" aria-pressed={st === 'struggled'}
               onClick={() => void write({ status: st === 'struggled' ? 'draft' : 'struggled' })}
@@ -310,7 +315,8 @@ export function ChallengeRecord({
         items={rec?.followUps ?? []}
         storyId={q.storyId} questionId={q.id}
         recordingPrefix={`resume:${q.storyId}:${q.id}`}
-        getContext={() => ({ question: q.q, answer: latestText.current, storyTitle: q.storyTitle, clusterTitle: q.clusterTitle, resume, resumeAnchor: q.resumeAnchor, tests: q.tests, gaps: rec?.gaps, revisions: rec?.revisions })}
+        getContext={getContext}
+        contextTextRef={contextTextRef}
         getQuote={() => { const box = answerBox.current; return box ? box.value.slice(box.selectionStart, box.selectionEnd) : ''; }}
       /></div>}
     </div>
