@@ -10,7 +10,7 @@
 
 **Spec:** `D:/markdown_editor/.local/lavish/runtime-reliability.html` 与本计划；细化展示页 `D:/markdown_editor/.local/lavish/production-development-plan.html`。
 
-**Status:** 设计与实施任务已整理，尚未应用运行代码、执行生产构建或更改计划任务。
+**Status (2026-09-15):** 工程实现、冻结构建、Windows 任务安装、旧维护移交和首次上线已完成。3002 正式版运行于 `20260915044815469-c97f59c8-4e226000`；3003 已验证后关闭，按需启动。以下保留原始计划清单；实际完成证据见 `docs/runtime-acceptance-2026-09-15.md`。跨设备、重新登录及多日稳定性仍待实际使用验证，不能视为已通过。
 
 ## Global Constraints
 
