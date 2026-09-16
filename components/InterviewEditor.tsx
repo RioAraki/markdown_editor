@@ -30,6 +30,8 @@ import { TopicDivider } from './interview/TopicDivider';
 import { ResumeSnippet } from './interview/ResumeSnippet';
 import { QuestionRecord, QuestionMeta } from './interview/QuestionRecord';
 import { AddQuestion } from './interview/AddQuestion';
+import { AddResumeSection } from './interview/AddResumeSection';
+import { resumeSectionKey } from '@/lib/nextResumeSection';
 import { PaperPanel } from './interview/PaperPanel';
 import { PaperUnit } from './interview/PaperUnit';
 import { ChallengeRecord, ChallengeMeta } from './interview/ChallengeRecord';
@@ -133,6 +135,7 @@ export function InterviewEditor() {
                 storyId: st.id,
                 storyTitle: st.title,
                 clusterTitle: c.title,
+                clusterId: c.id,
                 resumeAnchor: c.resumeAnchor ?? st.resumeAnchor,
               };
             }
@@ -694,10 +697,6 @@ function BlockRow({
       boundItem && paperIds.includes(boundItem) ? boundItem : undefined;
     // Every question in a resume cluster attacks the same line, so the anchor
     // is a property of the block rather than of each card.
-    const storyAnchor = block.units
-      .map((u) => parseStoryUnit(u.trailing)?.id)
-      .map((id) => (id ? cmeta[id]?.resumeAnchor : undefined))
-      .find(Boolean);
     return (
       <div className="py-3">
         <div className="flex items-baseline justify-between gap-3 mb-2">
@@ -730,7 +729,6 @@ function BlockRow({
         {/* One resume line's worth of attack, with the bullet pinned above
             it: 「这个数怎么统计的」 is unanswerable without the claim it is
             aimed at in view. */}
-        {storyAnchor && <ResumeSnippet resume={resume} anchor={storyAnchor} />}
         <div className="space-y-1.5">
           {paperId && (
             <PaperUnit
@@ -764,14 +762,23 @@ function BlockRow({
                 onToggleUnitStatus(dateStr, blockIdx, unitIdx, s, t),
             };
             if (/^\[[a-z]{2}-[a-z]+-\d+\]/.test(unit.trailing.trim())) {
+              const question = cmeta[parseStoryUnit(unit.trailing)!.id];
+              const previousId = parseStoryUnit(block.units[unitIdx - 1]?.trailing ?? '')?.id;
+              const previous = previousId ? cmeta[previousId] : undefined;
+              const startsSection = question && (!previous || resumeSectionKey(question) !== resumeSectionKey(previous));
               return (
+                <div key={unitIdx}>
+                {startsSection && <div className="pt-2 space-y-2">
+                  <h4 className="text-sm font-medium text-stone-800">{question.storyTitle} · {question.clusterTitle}</h4>
+                  {question.resumeAnchor && <ResumeSnippet resume={resume} anchor={question.resumeAnchor} />}
+                </div>}
                 <ChallengeRecord
-                  key={unitIdx}
                   {...common}
                   meta={cmeta}
                   saved={canswers}
                   resume={resume}
                 />
+                </div>
               );
             }
             return parseQuestionUnit(unit.trailing) ? (
@@ -803,6 +810,10 @@ function BlockRow({
             onAdd={(trailing) => onAppendUnit(dateStr, blockIdx, trailing)}
           />
         )}
+        {(name === '简历深挖' || block.units.some(u => parseStoryUnit(u.trailing))) && <AddResumeSection
+          units={block.units} meta={cmeta}
+          onAdd={(trailing) => onAppendUnit(dateStr, blockIdx, trailing)}
+        />}
         {isQuestionBlock && (
           <AddQuestion
             units={block.units}

@@ -32,6 +32,7 @@ export interface ChallengeMeta extends StoryQuestion {
   storyId: string;
   storyTitle: string;
   clusterTitle: string;
+  clusterId?: string;
   /** The resume line this cluster interrogates. */
   resumeAnchor?: string;
 }
