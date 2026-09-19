@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Loader2, Plus } from 'lucide-react';
-import { parseQuestionUnit } from '@shared/interview/qbank';
+import { bankIdForQuestionId, parseQuestionUnit } from '@shared/interview/qbank';
 import { TaskUnit } from '@/types/interview';
 
 /**
@@ -29,19 +29,15 @@ export function AddQuestion({
       const parsed = units
         .map((u) => parseQuestionUnit(u.trailing))
         .filter((p): p is NonNullable<typeof p> => !!p);
-      // Four banks share one endpoint, so the slot must say which one it is.
-      // Without this a Python slot happily served an Agent question — the ids
-      // carry the bank (`py01-…` / `be01-…` / `qta-…` vs `aga-…`), so read it
-      // off what is already on the card rather than threading another prop
-      // down. `agent` is the fallback, so every other bank needs its own test
-      // here — a missing one silently draws Agent questions into that slot.
-      const bankId = parsed.some((p) => p.id.startsWith('py'))
-        ? 'python'
-        : parsed.some((p) => p.id.startsWith('be'))
-          ? 'backend'
-          : parsed.some((p) => p.id.startsWith('qt'))
-            ? 'quant'
-            : 'agent';
+      // The banks share one endpoint, so the slot must say which one it is.
+      // Without this a Python slot happily served an Agent question. The ids
+      // carry the bank, so read it off what is already on the card rather than
+      // threading another prop down. Any card that names a bank settles it —
+      // a slot holds one bank's questions — and a card whose id matches no
+      // prefix reads as `agent`, which is also where an empty slot lands.
+      const bankId =
+        parsed.map((p) => bankIdForQuestionId(p.id)).find((b) => b !== 'agent') ??
+        'agent';
       const res = await fetch('/api/interview/qbank/next', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

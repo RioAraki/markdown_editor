@@ -18,7 +18,7 @@ import {
 } from '@shared/interview/load';
 import { parseProblemUnit } from '@shared/interview/leetcode';
 import { QBANK_REDO_DAYS, parseQuestionUnit } from '@shared/interview/qbank';
-import { recommendQuestions } from '@shared/interview/qbank';
+import { bankIdForPool, recommendQuestions } from '@shared/interview/qbank';
 import { carryOver, dayFromBlocks } from '@shared/interview/core';
 import {
   parseStoryUnit,
@@ -265,20 +265,13 @@ export async function GET(req: Request) {
     for (const [id, cat] of Object.entries(categoryOf)) itemOfCategory[cat] = id;
 
     for (const task of suggestion?.tasks ?? []) {
-      // Four banks share this machinery; the slot's pool says which one.
-      // A pool that matches nothing here falls through to `continue`, and the
-      // slot then renders as a generic 打卡 card with no questions named — which
-      // is how the quant bank sat invisible after it was added everywhere else.
+      // The banks share this machinery; the slot's pool says which one. Null
+      // means the block is not a 题库 block at all (刷题, 简历深挖, 休整), so
+      // skipping is right — but it is also what a bank missing from the roster
+      // looks like, and then the slot renders as a generic 打卡 card with no
+      // questions in it. `banks.test.cjs` is what keeps those two apart.
       const pool = task.pool ?? [];
-      const bankId = pool.some((x) => x.startsWith('py-'))
-        ? 'python'
-        : pool.includes('fd-core')
-          ? 'backend'
-          : pool.includes('ai-qbank')
-            ? 'agent'
-            : pool.some((x) => x.startsWith('qt-'))
-              ? 'quant'
-              : null;
+      const bankId = bankIdForPool(pool);
       if (!bankId) continue;
       // Deliberately not restricted to the slot's category. Unlike LeetCode
       // topics, which are interchangeable, this bank is written 由浅入深 as one
