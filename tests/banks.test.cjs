@@ -149,6 +149,49 @@ dataTest('each bank resolves from some block in the plan', () => {
   assert.deepEqual(unreachable, [], `no block's pool resolves to: ${unreachable.join(', ')}`);
 });
 
+dataTest('every question-bank block name resolves to a bank by its own pool', () => {
+  // The 再答一题 endpoint decides the bank from the block's name → pool, rather
+  // than from the ids already on the card. That only works if every block that
+  // holds questions is reachable by name, so this asserts the mapping the
+  // server actually performs. A block that falls through here would silently
+  // hand the decision back to the client's guess — which is how three Agent
+  // questions landed in the 数理统计 slot on 2026-09-19.
+  const { plan, reachesQuestions } = data();
+  const unresolved = [];
+  for (const block of plan.blocks ?? []) {
+    const pool = block.pool ?? [];
+    if (!pool.some(reachesQuestions)) continue;
+    if (!block.name) {
+      unresolved.push(`${block.id} (没有 name，服务端按名字查不到它)`);
+      continue;
+    }
+    // Exactly what route.ts does: find by name, then resolve that block's pool.
+    const found = (plan.blocks ?? []).find((b) => b.name === block.name);
+    if (!found || !bankIdForPool(found.pool ?? [])) {
+      unresolved.push(`${block.id} / ${block.name}`);
+    }
+  }
+  assert.deepEqual(
+    unresolved,
+    [],
+    `这些题库 block 无法由名字解析出题库，取题会退回客户端的猜测：\n  ${unresolved.join('\n  ')}`,
+  );
+});
+
+dataTest('block names are unique, so resolving by name is unambiguous', () => {
+  // `find(b => b.name === blockName)` takes the first match, so two blocks
+  // sharing a name would make the wrong pool decide the bank.
+  const { plan } = data();
+  const seen = new Map();
+  const dupes = [];
+  for (const b of plan.blocks ?? []) {
+    if (!b.name) continue;
+    if (seen.has(b.name)) dupes.push(`${b.name}: ${seen.get(b.name)} 与 ${b.id}`);
+    else seen.set(b.name, b.id);
+  }
+  assert.deepEqual(dupes, [], `block 名重复，按名字定题库会取到错的那个：\n  ${dupes.join('\n  ')}`);
+});
+
 dataTest('question ids route back to the bank they came from', () => {
   // `bankIdForQuestionId` falls back to `agent`, so a bank whose prefix is
   // missing or shadowed does not fail — it silently serves Agent questions.

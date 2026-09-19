@@ -14,9 +14,12 @@ import { TaskUnit } from '@/types/interview';
  */
 export function AddQuestion({
   units,
+  blockName,
   onAdd,
 }: {
   units: TaskUnit[];
+  /** The slot's own name, which the server maps to a pool and thus to a bank. */
+  blockName?: string;
   onAdd: (trailing: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -29,12 +32,12 @@ export function AddQuestion({
       const parsed = units
         .map((u) => parseQuestionUnit(u.trailing))
         .filter((p): p is NonNullable<typeof p> => !!p);
-      // The banks share one endpoint, so the slot must say which one it is.
-      // Without this a Python slot happily served an Agent question. The ids
-      // carry the bank, so read it off what is already on the card rather than
-      // threading another prop down. Any card that names a bank settles it —
-      // a slot holds one bank's questions — and a card whose id matches no
-      // prefix reads as `agent`, which is also where an empty slot lands.
+      // `blockName` is what actually decides the bank: the server maps it to
+      // the block's pool in plan.json. The id-derived guess below is only a
+      // fallback for a slot whose name the server cannot resolve, and the
+      // server overrides it whenever the block does resolve — which is what
+      // keeps a stale bundle (no `qt` branch, every quant card reading as
+      // `agent`) from pulling the wrong bank's questions into a slot.
       const bankId =
         parsed.map((p) => bankIdForQuestionId(p.id)).find((b) => b !== 'agent') ??
         'agent';
@@ -42,6 +45,7 @@ export function AddQuestion({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          blockName,
           exclude: parsed.map((p) => p.id),
           bankId,
           count: 1,
