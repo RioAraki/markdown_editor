@@ -265,7 +265,10 @@ export async function GET(req: Request) {
     for (const [id, cat] of Object.entries(categoryOf)) itemOfCategory[cat] = id;
 
     for (const task of suggestion?.tasks ?? []) {
-      // Three banks share this machinery; the slot's pool says which one.
+      // Four banks share this machinery; the slot's pool says which one.
+      // A pool that matches nothing here falls through to `continue`, and the
+      // slot then renders as a generic 打卡 card with no questions named — which
+      // is how the quant bank sat invisible after it was added everywhere else.
       const pool = task.pool ?? [];
       const bankId = pool.some((x) => x.startsWith('py-'))
         ? 'python'
@@ -273,7 +276,9 @@ export async function GET(req: Request) {
           ? 'backend'
           : pool.includes('ai-qbank')
             ? 'agent'
-            : null;
+            : pool.some((x) => x.startsWith('qt-'))
+              ? 'quant'
+              : null;
       if (!bankId) continue;
       // Deliberately not restricted to the slot's category. Unlike LeetCode
       // topics, which are interchangeable, this bank is written 由浅入深 as one

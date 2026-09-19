@@ -29,15 +29,19 @@ export function AddQuestion({
       const parsed = units
         .map((u) => parseQuestionUnit(u.trailing))
         .filter((p): p is NonNullable<typeof p> => !!p);
-      // Two banks share one endpoint, so the slot must say which one it is.
+      // Four banks share one endpoint, so the slot must say which one it is.
       // Without this a Python slot happily served an Agent question — the ids
-      // carry the bank (`py01-…` vs `01-…`), so read it off what is already
-      // on the card rather than threading another prop down.
+      // carry the bank (`py01-…` / `be01-…` / `qta-…` vs `aga-…`), so read it
+      // off what is already on the card rather than threading another prop
+      // down. `agent` is the fallback, so every other bank needs its own test
+      // here — a missing one silently draws Agent questions into that slot.
       const bankId = parsed.some((p) => p.id.startsWith('py'))
         ? 'python'
         : parsed.some((p) => p.id.startsWith('be'))
           ? 'backend'
-          : 'agent';
+          : parsed.some((p) => p.id.startsWith('qt'))
+            ? 'quant'
+            : 'agent';
       const res = await fetch('/api/interview/qbank/next', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
