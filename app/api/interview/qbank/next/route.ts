@@ -1,21 +1,35 @@
 import { resolveServerPaths } from '@/lib/serverPaths';
 import { NextResponse } from 'next/server';
 import { format } from 'date-fns';
+import { loadPlan } from '@/lib/interviewPlan';
 import { loadQBank } from '@shared/interview/load';
-import { questionUnitText, recommendQuestions } from '@shared/interview/qbank';
+import { bankIdForPool, questionUnitText, recommendQuestions } from '@shared/interview/qbank';
 
 const DATA_DIR = resolveServerPaths().interviewData;
 
 /**
  * One more question, for a slot with time to spare.
  *
- * Body: `{ exclude?: string[], bankId?: string, category?: string, count?: number }`.
- * `bankId` is required in practice: the banks are merged behind one endpoint,
- * and without it a Python slot draws from the Agent bank.
+ * Body: `{ blockName?: string, exclude?: string[], bankId?: string,
+ *          category?: string, count?: number }`.
+ *
+ * Which bank to draw from is decided **here**, from the block's own `pool` in
+ * plan.json — not from whatever the caller guessed. The client used to infer it
+ * from the ids already on the card, which fails in three ways: an empty slot has
+ * nothing to infer from, a client running older code infers wrongly, and nothing
+ * downstream checks the answer. All three happened at once on 2026-09-19: a
+ * browser still holding the pre-deploy bundle had no `qt` branch, so every
+ * `qta-…` card read as `agent` and three Agent questions were appended to the
+ * 数理统计 slot. Deciding server-side closes the window, because a stale client
+ * cannot reach a conclusion the server does not agree with.
+ *
+ * `bankId` in the body is now only a fallback for callers that send no block
+ * name, and it is overridden whenever the block resolves.
  */
 export async function POST(req: Request) {
   try {
     const body: {
+      blockName?: string;
       exclude?: string[];
       category?: string;
       bankId?: string;
@@ -26,11 +40,22 @@ export async function POST(req: Request) {
     const { bank, log } = await loadQBank(DATA_DIR);
     const today = format(new Date(), 'yyyy-MM-dd');
 
+    // The block names its pool, the pool names the bank. A block that resolves
+    // wins over the body outright — that is the whole point of this endpoint
+    // knowing about the plan.
+    let bankId = body.bankId ?? null;
+    if (body.blockName) {
+      const plan = await loadPlan();
+      const block = (plan.blocks ?? []).find((b) => b.name === body.blockName);
+      const resolved = block ? bankIdForPool(block.pool ?? []) : null;
+      if (resolved) bankId = resolved;
+    }
+
     const recs = recommendQuestions({
       bank,
       log,
       category: body.category ?? null,
-      bankId: body.bankId ?? null,
+      bankId,
       count: Math.min(Math.max(body.count ?? 1, 1), 5),
       today,
       exclude: new Set(body.exclude ?? []),
