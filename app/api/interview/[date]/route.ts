@@ -19,6 +19,7 @@ import path from 'path';
 import { guardedPromises as fs } from '@/lib/guardedFs';
 import { loadLeetCode, loadQBank } from '@shared/interview/load';
 import { parseQuestionUnit, questionUnitText } from '@shared/interview/qbank';
+import { behaviouralUnitText } from '@shared/interview/behavioural';
 import { loadStories } from '@shared/interview/load';
 import { questionUnitText as storyUnitText } from '@shared/interview/stories';
 import {
@@ -440,6 +441,18 @@ export async function POST(req: Request, context: RouteContext) {
           .map((id) => byId.get(id))
           .filter((x): x is NonNullable<typeof x> => !!x)
           .map(({ st, q }) => storyUnitText(st, q));
+      }
+    }
+
+    // 行为故事 names its question on the box, the way 刷题 and the question
+    // banks do. Without this the slot writes a blank box whose subject lives
+    // only in the `items:` marker — which caps the slot at one question a day
+    // and hides the subject from everything that reads unit text.
+    for (const [task, v] of Object.entries(binding)) {
+      if (unitTexts[task]?.length) continue;
+      const block = (plan.blocks ?? []).find((b) => b.name === task);
+      if (block?.track === 'behavioral' && v?.id) {
+        unitTexts[task] = [behaviouralUnitText(v.id, v.title)];
       }
     }
 

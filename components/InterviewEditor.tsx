@@ -31,6 +31,9 @@ import { ResumeSnippet } from './interview/ResumeSnippet';
 import { QuestionRecord, QuestionMeta } from './interview/QuestionRecord';
 import { AddQuestion } from './interview/AddQuestion';
 import { ItemSwap } from './interview/ItemSwap';
+import { BehaviouralRecord } from './interview/BehaviouralRecord';
+import { AddBehavioural } from './interview/AddBehavioural';
+import { parseBehaviouralUnit } from '@shared/interview/behavioural';
 import { AddResumeSection } from './interview/AddResumeSection';
 import { resumeSectionKey } from '@/lib/nextResumeSection';
 import { PaperPanel } from './interview/PaperPanel';
@@ -799,6 +802,25 @@ function BlockRow({
               onChange: (s: UnitStatus, t: string) =>
                 onToggleUnitStatus(dateStr, blockIdx, unitIdx, s, t),
             };
+            if (name === '行为故事') {
+              // Each box is one spoken question; a box with no id falls back to
+              // the day's binding, which is how days written before questions
+              // were named on the line keep rendering.
+              const only = block.units.length === 1;
+              return (
+                <BehaviouralRecord
+                  key={unitIdx}
+                  {...common}
+                  task={name}
+                  fallbackId={parseBehaviouralUnit(unit.trailing) ? undefined : boundItem}
+                  onSwap={
+                    only && boundItem && !parseBehaviouralUnit(unit.trailing)
+                      ? (id) => onSwapItem(dateStr, name, id)
+                      : undefined
+                  }
+                />
+              );
+            }
             if (/^\[[a-z]{2}-[a-z]+-\d+\]/.test(unit.trailing.trim())) {
               const question = cmeta[parseStoryUnit(unit.trailing)!.id];
               const previousId = parseStoryUnit(block.units[unitIdx - 1]?.trailing ?? '')?.id;
@@ -836,13 +858,22 @@ function BlockRow({
                 attempts={attempts}
                 problemUrl={links.problems}
               />
-              {name === '行为故事' && boundItem && <RecordingPanel key={boundItem} questionKey={`behavioral:${boundItem}`} />}
-              {boundItem && !paperId && (
-                <ItemSwap
+              {name === '行为故事' ? (
+                // 录音与换题都下沉到了每道题自己身上（BehaviouralRecord），
+                // 这里只留追加入口。
+                <AddBehavioural
                   task={name}
-                  currentId={boundItem}
-                  onSwap={(id) => onSwapItem(dateStr, name, id)}
+                  units={block.units}
+                  onAdd={(trailing) => onAppendUnit(dateStr, blockIdx, trailing)}
                 />
+              ) : (
+                boundItem && !paperId && (
+                  <ItemSwap
+                    task={name}
+                    currentId={boundItem}
+                    onSwap={(id) => onSwapItem(dateStr, name, id)}
+                  />
+                )
               )}
               </div>
             );

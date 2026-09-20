@@ -33,6 +33,7 @@ import {
 } from '@shared/interview/leetcode';
 import { TodayPlanResponse } from '@/types/interview';
 import { listRecordings } from '@/lib/interviewRecordings';
+import { parseBehaviouralUnit } from '@shared/interview/behavioural';
 
 const DATA_DIR = resolveServerPaths().interviewData;
 
@@ -89,10 +90,34 @@ export async function GET(req: Request) {
      * new question bank is one case here, and forgetting is visible rather
      * than showing up weeks later as the same question six days running.
      *
-     * Units with no durable record (系统设计, 行为故事, C++, 定向补课) fall
-     * through to `false`: there the checkbox really is the only truth, so an
-     * unticked box correctly means still to do.
+     * Units with no durable record (系统设计, C++, 定向补课) fall through to
+     * `false`: there the checkbox really is the only truth, so an unticked box
+     * correctly means still to do. 行为故事 used to be in that list and should
+     * not have been — its recordings are a durable record, they were simply
+     * never consulted, which is how one question stayed scheduled four days
+     * running while eleven others were never scheduled at all.
      */
+    // A spoken answer's durable record is its recording, so gather them before
+    // `isResolved` needs them. Two different shapes ask: a box that names its
+    // question (`[bh-cn-intro] …`) goes through `isResolved`, while a day
+    // written before questions were named on the line has only the `items:`
+    // binding and goes through `isItemDone`.
+    const behaviouralIds = inventory.domains
+      .filter((d) => d.track === 'behavioral')
+      .flatMap((d) => (d.modules ?? []).flatMap((m) => (m.items ?? []).map((i) => i.id)));
+    const recorded = new Set(
+      (
+        await Promise.all(
+          behaviouralIds.map(async (id) =>
+            (await listRecordings(`behavioral:${id}`).catch(() => [])).length > 0
+              ? id
+              : null,
+          ),
+        )
+      ).filter((id): id is string => id !== null),
+    );
+    const isItemDone = (_taskName: string, itemId: string) => recorded.has(itemId);
+
     const lcStates = new Map(
       allProblemStates(leetcode.bank, leetcode.log, today).map((st) => [
         st.problem.id,
@@ -116,6 +141,11 @@ export async function GET(req: Request) {
         const last = rec.answers[rec.answers.length - 1];
         return daysSince(last.date) < QBANK_REDO_DAYS;
       }
+      const b = parseBehaviouralUnit(unit);
+      if (b) {
+        // A spoken answer's durable record is its recording, not the box.
+        return recorded.has(b.id);
+      }
       const s = parseStoryUnit(unit);
       if (s) {
         // Answers advance through their own file, not a day's box.
@@ -125,25 +155,6 @@ export async function GET(req: Request) {
       return false;
     };
 
-    // 行为故事's boxes carry no unit text, so `isResolved` never sees them —
-    // its durable record is the recording. Without this the slot stays pinned
-    // to whatever it was first bound to (it sat on 最大的技术挑战 for four days
-    // while the other eleven questions were never scheduled once).
-    const behaviouralIds = inventory.domains
-      .filter((d) => d.track === 'behavioral')
-      .flatMap((d) => (d.modules ?? []).flatMap((m) => (m.items ?? []).map((i) => i.id)));
-    const recorded = new Set(
-      (
-        await Promise.all(
-          behaviouralIds.map(async (id) =>
-            (await listRecordings(`behavioral:${id}`).catch(() => [])).length > 0
-              ? id
-              : null,
-          ),
-        )
-      ).filter((id): id is string => id !== null),
-    );
-    const isItemDone = (_taskName: string, itemId: string) => recorded.has(itemId);
 
     // Anything left unticked comes back before anything new is chosen.
     const pending = new Map(
