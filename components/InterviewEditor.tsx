@@ -858,23 +858,7 @@ function BlockRow({
                 attempts={attempts}
                 problemUrl={links.problems}
               />
-              {name === '行为故事' ? (
-                // 录音与换题都下沉到了每道题自己身上（BehaviouralRecord），
-                // 这里只留追加入口。
-                <AddBehavioural
-                  task={name}
-                  units={block.units}
-                  onAdd={(trailing) => onAppendUnit(dateStr, blockIdx, trailing)}
-                />
-              ) : (
-                boundItem && !paperId && (
-                  <ItemSwap
-                    task={name}
-                    currentId={boundItem}
-                    onSwap={(id) => onSwapItem(dateStr, name, id)}
-                  />
-                )
-              )}
+
               </div>
             );
           })}
@@ -895,6 +879,23 @@ function BlockRow({
             units={block.units}
             blockName={name}
             onAdd={(trailing) => onAppendUnit(dateStr, blockIdx, trailing)}
+          />
+        )}
+        {/* Both of these belong to the block, not to a unit: putting them in
+            the units loop renders one per checkbox, and 行为故事 returns early
+            from that loop anyway, so its 再来一题 never rendered at all. */}
+        {name === '行为故事' && (
+          <AddBehavioural
+            task={name}
+            units={block.units}
+            onAdd={(trailing) => onAppendUnit(dateStr, blockIdx, trailing)}
+          />
+        )}
+        {name !== '行为故事' && boundItem && !paperId && !isQuestionBlock && (
+          <ItemSwap
+            task={name}
+            currentId={boundItem}
+            onSwap={(id) => onSwapItem(dateStr, name, id)}
           />
         )}
         {notesBlockIdx >= 0 && (
