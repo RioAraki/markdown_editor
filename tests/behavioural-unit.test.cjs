@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const makeLoader = require('./helpers/load-typescript.cjs');
+const { dataTest, readData } = require('./helpers/data-test.cjs');
 
 const load = makeLoader();
 const { parseBehaviouralUnit, behaviouralUnitText } = load(
@@ -63,16 +64,11 @@ test('ids from the other unit kinds are left alone', () => {
   }
 });
 
-test('all behavioural inventory ids are actually matched', () => {
+dataTest('all behavioural inventory ids are actually matched', () => {
   // The prefix anchor is only safe if the inventory really uses it; a future
   // question added under a different id would silently render as a plain note.
-  const fs = require('node:fs');
-  const inv = JSON.parse(
-    fs.readFileSync(
-      path.resolve(__dirname, '../../diary/data/interview/inventory.json'),
-      'utf8',
-    ),
-  );
+  // Data, not code — so it skips inside a release build, which carries none.
+  const inv = readData('inventory.json');
   const ids = (inv.domains ?? [])
     .filter((d) => d.track === 'behavioral')
     .flatMap((d) => (d.modules ?? []).flatMap((m) => (m.items ?? []).map((i) => i.id)));

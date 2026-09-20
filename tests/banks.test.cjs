@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const makeLoader = require('./helpers/load-typescript.cjs');
+const { dataTest, readData } = require('./helpers/data-test.cjs');
 
 // Every question bank is four facts — a file, a pool test, an id prefix, and a
 // place in the load order — and for three banks running they were spelled out
@@ -24,27 +25,16 @@ const makeLoader = require('./helpers/load-typescript.cjs');
 // and skip with a reason when they are not, rather than pretending a fixture
 // proves the roster still matches reality.
 const SHARED = path.resolve(__dirname, '../../diary/shared/interview/qbank.ts');
-const DATA = path.resolve(__dirname, '../../diary/data/interview');
 
 const load = makeLoader();
 const { BANKS, bankIdForPool, bankIdForQuestionId } = load(SHARED);
-
-const haveData = fs.existsSync(path.join(DATA, 'plan.json'));
-const dataTest = (name, fn) =>
-  test(name, {
-    skip: haveData
-      ? false
-      : `no interview data at ${DATA} — expected inside a release build, which snapshots code only`,
-  }, fn);
-
-const readJson = (file) => JSON.parse(fs.readFileSync(path.join(DATA, file), 'utf8'));
 
 /** Loaded once, on first use, so a code-only host never touches the data dir. */
 let dataCache;
 function data() {
   if (dataCache) return dataCache;
-  const plan = readJson('plan.json');
-  const inventory = readJson('inventory.json');
+  const plan = readData('plan.json');
+  const inventory = readData('inventory.json');
 
   const categoryOf = {};
   for (const domain of inventory.domains ?? []) {
@@ -55,7 +45,7 @@ function data() {
     }
   }
 
-  const banks = BANKS.map((bank) => ({ ...bank, questions: readJson(bank.file).questions ?? [] }));
+  const banks = BANKS.map((bank) => ({ ...bank, questions: readData(bank.file).questions ?? [] }));
   const categoriesWithQuestions = new Set(banks.flatMap((b) => b.questions.map((q) => q.category)));
 
   /** Does this pool entry lead to questions — an item's category, or a module holding one? */
