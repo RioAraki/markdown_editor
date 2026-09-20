@@ -32,6 +32,7 @@ import {
   recommendProblems,
 } from '@shared/interview/leetcode';
 import { TodayPlanResponse } from '@/types/interview';
+import { listRecordings } from '@/lib/interviewRecordings';
 
 const DATA_DIR = resolveServerPaths().interviewData;
 
@@ -124,9 +125,32 @@ export async function GET(req: Request) {
       return false;
     };
 
+    // 行为故事's boxes carry no unit text, so `isResolved` never sees them —
+    // its durable record is the recording. Without this the slot stays pinned
+    // to whatever it was first bound to (it sat on 最大的技术挑战 for four days
+    // while the other eleven questions were never scheduled once).
+    const behaviouralIds = inventory.domains
+      .filter((d) => d.track === 'behavioral')
+      .flatMap((d) => (d.modules ?? []).flatMap((m) => (m.items ?? []).map((i) => i.id)));
+    const recorded = new Set(
+      (
+        await Promise.all(
+          behaviouralIds.map(async (id) =>
+            (await listRecordings(`behavioral:${id}`).catch(() => [])).length > 0
+              ? id
+              : null,
+          ),
+        )
+      ).filter((id): id is string => id !== null),
+    );
+    const isItemDone = (_taskName: string, itemId: string) => recorded.has(itemId);
+
     // Anything left unticked comes back before anything new is chosen.
     const pending = new Map(
-      carryOver(fullPlan, today, 21, isResolved).map((c) => [c.taskName, c]),
+      carryOver(fullPlan, today, 21, isResolved, isItemDone).map((c) => [
+        c.taskName,
+        c,
+      ]),
     );
 
     // Auto-pick one inventory item per task slot, no repeats within the day.

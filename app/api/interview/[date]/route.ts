@@ -11,6 +11,7 @@ import {
   buildDayMarkdown,
   loadPlan,
   resolveDayPlan,
+  taskLabel,
 } from '@/lib/interviewPlan';
 import { dayFromBlocks } from '@shared/interview/core';
 import { flattenInventory, loadInventory, loadMastery } from '@/lib/interviewInventory';
@@ -221,6 +222,133 @@ export async function PUT(req: Request, context: RouteContext) {
       { error: 'Failed to save interview day' },
       { status: 500 },
     );
+  }
+}
+
+/**
+ * Re-point one slot at a different inventory item, on a day that already exists.
+ *
+ * Body: `{ task: string, itemId: string, baseContent?: string }`.
+ *
+ * The day file states a slot's subject twice — in the `<!-- items: … -->`
+ * marker and in the task's own heading — so both move together here; changing
+ * only the marker leaves the heading naming yesterday's question. The slot's
+ * checkboxes are reset to unticked, because a tick recorded against the old
+ * item says nothing about the new one.
+ *
+ * This exists because the only way to change a binding used to be deleting the
+ * day and rebuilding it: `POST` refuses to overwrite, and `PUT` takes whole-file
+ * content the client would have to hand-edit.
+ */
+export async function PATCH(req: Request, context: RouteContext) {
+  try {
+    const { date } = await context.params;
+    if (!DATE_RE.test(date)) {
+      return NextResponse.json({ error: 'Invalid date format' }, { status: 400 });
+    }
+    const body: { task?: string; itemId?: string; baseContent?: string } =
+      await req.json().catch(() => ({}));
+    const task = body.task?.trim();
+    const itemId = body.itemId?.trim();
+    if (!task || !itemId) {
+      return NextResponse.json(
+        { error: 'task and itemId are required' },
+        { status: 400 },
+      );
+    }
+
+    const current = await readInterviewDay(date);
+    // Same optimistic lock as PUT: a tab open since before someone else wrote
+    // must not silently clobber that write.
+    if (typeof body.baseContent === 'string' && body.baseContent !== current) {
+      return NextResponse.json({ error: 'stale', content: current }, { status: 409 });
+    }
+
+    const [plan, inventory, mastery] = await Promise.all([
+      loadPlan(),
+      loadInventory(),
+      loadMastery(),
+    ]);
+    const choice = flattenInventory(inventory, {}, mastery).find((c) => c.id === itemId);
+    if (!choice) {
+      return NextResponse.json({ error: 'Unknown item id' }, { status: 400 });
+    }
+
+    // The slot must actually be allowed to draw this item: a block's `pool`
+    // names the modules it covers, and honouring it here keeps the API from
+    // being a way around the same constraint the picker enforces.
+    const block = (plan.blocks ?? []).find((b) => b.name === task);
+    if (block?.pool?.length && !block.pool.includes(choice.moduleId)) {
+      return NextResponse.json(
+        { error: `「${task}」不能绑定到「${choice.title}」：不在这个时段的范围内` },
+        { status: 400 },
+      );
+    }
+
+    const eol = current.includes('\r\n') ? '\r\n' : '\n';
+    const lines = current.split(/\r?\n/);
+
+    // 1. the marker
+    const markerAt = lines.findIndex((l) => /^<!--\s*items:/.test(l.trim()));
+    const bound = new Map<string, string>();
+    if (markerAt >= 0) {
+      const inner =
+        /^<!--\s*items:\s*(.*?)\s*-->$/.exec(lines[markerAt].trim())?.[1] ?? '';
+      for (const part of inner.split(';')) {
+        const [k, v] = part.split('=').map((x) => x.trim());
+        if (k && v) bound.set(k, v);
+      }
+    }
+    // Re-pointing a slot at what it already holds is a no-op, not a reason to
+    // wipe the checkboxes. The picker guards this too, but the reset is
+    // destructive enough that the server should not depend on it.
+    if (bound.get(task) === itemId) {
+      const unchanged: InterviewDayContentResponse = {
+        dateStr: date,
+        filename: `${date}.md`,
+        content: current,
+      };
+      return NextResponse.json(unchanged);
+    }
+
+    bound.set(task, itemId);
+    const marker = `<!-- items: ${[...bound]
+      .map(([k, v]) => `${k}=${v}`)
+      .join('; ')} -->`;
+    if (markerAt >= 0) lines[markerAt] = marker;
+    else lines.splice(1, 0, marker);
+
+    // 2. the heading, and 3. its checkboxes
+    const headingAt = lines.findIndex(
+      (l) => l.startsWith('- ') && (l.slice(2).split('·')[0] ?? '').trim() === task,
+    );
+    if (headingAt < 0) {
+      return NextResponse.json(
+        { error: `这一天没有「${task}」这个时段` },
+        { status: 400 },
+      );
+    }
+    if (block) lines[headingAt] = `- ${taskLabel(block, choice.title)}`;
+    for (let i = headingAt + 1; i < lines.length; i++) {
+      if (lines[i].startsWith('- ')) break;               // next slot
+      const m = /^(\s+- )\[[^\]]\](.*)$/.exec(lines[i]);
+      if (m) lines[i] = `${m[1]}[ ]${m[2]}`;
+    }
+
+    const content = lines.join(eol);
+    await writeInterviewDay(date, content);
+    const response: InterviewDayContentResponse = {
+      dateStr: date,
+      filename: `${date}.md`,
+      content,
+    };
+    return NextResponse.json(response);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Interview day not found') {
+      return NextResponse.json({ error: 'Interview day not found' }, { status: 404 });
+    }
+    console.error('Error in PATCH /api/interview/[date]:', error);
+    return NextResponse.json({ error: 'Failed to change binding' }, { status: 500 });
   }
 }
 

@@ -30,6 +30,7 @@ import { TopicDivider } from './interview/TopicDivider';
 import { ResumeSnippet } from './interview/ResumeSnippet';
 import { QuestionRecord, QuestionMeta } from './interview/QuestionRecord';
 import { AddQuestion } from './interview/AddQuestion';
+import { ItemSwap } from './interview/ItemSwap';
 import { AddResumeSection } from './interview/AddResumeSection';
 import { resumeSectionKey } from '@/lib/nextResumeSection';
 import { PaperPanel } from './interview/PaperPanel';
@@ -76,6 +77,8 @@ interface Handlers {
     note: string,
   ) => void;
   onAppendUnit: (dateStr: string, blockIdx: number, trailing: string) => void;
+  /** Re-point a slot at another inventory item on an existing day. */
+  onSwapItem: (dateStr: string, task: string, itemId: string) => Promise<void>;
 }
 
 export function InterviewEditor() {
@@ -95,6 +98,30 @@ export function InterviewEditor() {
     saveNow,
     refresh,
   } = useInterview();
+
+  /**
+   * Change which inventory item a slot is bound to, on a day already written.
+   *
+   * Goes straight to the server rather than through the local content buffer:
+   * the binding lives in the `items:` marker *and* the task heading, and the
+   * server owns keeping those two in step (plus resetting the checkboxes).
+   */
+  const swapItem = useCallback(
+    async (dateStr: string, task: string, itemId: string) => {
+      await saveNow();
+      const res = await fetch(`/api/interview/${dateStr}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task, itemId }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error ?? '换题失败');
+      }
+      await refresh();
+    },
+    [saveNow, refresh],
+  );
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const today = getTodayDate();
@@ -410,6 +437,7 @@ export function InterviewEditor() {
                 onToggleUnitStatus={toggleUnitStatus}
                 onUpdateNoteEntry={updateNoteEntry}
                 onAppendUnit={appendUnit}
+                onSwapItem={swapItem}
               />
             )}
             <div className="h-[40vh]" />
@@ -440,6 +468,7 @@ function DayCard({
   onToggleUnitStatus,
   onUpdateNoteEntry,
   onAppendUnit,
+  onSwapItem,
 }: {
   day: InterviewDayDoc;
   isToday: boolean;
@@ -539,6 +568,7 @@ function DayCard({
               onToggleUnitStatus={onToggleUnitStatus}
               onUpdateNoteEntry={onUpdateNoteEntry}
               onAppendUnit={onAppendUnit}
+              onSwapItem={onSwapItem}
             />
           );
         })}
@@ -617,6 +647,7 @@ function BlockRow({
   onToggleUnitStatus,
   onUpdateNoteEntry,
   onAppendUnit,
+  onSwapItem,
 }: {
   block: InterviewBlock;
   dateStr: string;
@@ -671,6 +702,13 @@ function BlockRow({
           onChange={(s, t) => onToggleTaskStatus(dateStr, blockIdx, s, t)}
         />
         {behavioralItem && <RecordingPanel key={behavioralItem} questionKey={`behavioral:${behavioralItem}`} />}
+        {itemsByTask[name] && (
+          <ItemSwap
+            task={name}
+            currentId={itemsByTask[name]}
+            onSwap={(id) => onSwapItem(dateStr, name, id)}
+          />
+        )}
         {notesBlockIdx >= 0 && (
           <TaskNote
             value={noteValue}
@@ -799,6 +837,13 @@ function BlockRow({
                 problemUrl={links.problems}
               />
               {name === '行为故事' && boundItem && <RecordingPanel key={boundItem} questionKey={`behavioral:${boundItem}`} />}
+              {boundItem && !paperId && (
+                <ItemSwap
+                  task={name}
+                  currentId={boundItem}
+                  onSwap={(id) => onSwapItem(dateStr, name, id)}
+                />
+              )}
               </div>
             );
           })}
