@@ -333,7 +333,9 @@ export async function PATCH(req: Request, context: RouteContext) {
     for (let i = headingAt + 1; i < lines.length; i++) {
       if (lines[i].startsWith('- ')) break;               // next slot
       const m = /^(\s+- )\[[^\]]\](.*)$/.exec(lines[i]);
-      if (m) lines[i] = `${m[1]}[ ]${m[2]}`;
+      // `[@id]` lines are topics appended after the bound one (AddTopic); they
+      // are not what is being swapped, so their records stand.
+      if (m && !/^\s*\[@[a-z0-9-]+\]/.test(m[2])) lines[i] = `${m[1]}[ ]${m[2]}`;
     }
 
     const content = lines.join(eol);

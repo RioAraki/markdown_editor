@@ -141,7 +141,7 @@ export function ItemSwap({
           </ul>
           {error && <p className="mt-1 px-2 text-[11px] text-red-600">{error}</p>}
           <p className="mt-1 px-2 text-[10px] text-stone-400">
-            换题会把这个时段的打卡重置为未完成——旧题的记录对新题不作数。
+            换题会把这个时段的打卡重置为未完成——旧题的记录对新题不作数（「再来一个主题」追加的不受影响）。
           </p>
         </div>
       )}

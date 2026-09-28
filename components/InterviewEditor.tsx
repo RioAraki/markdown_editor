@@ -31,6 +31,7 @@ import { ResumeSnippet } from './interview/ResumeSnippet';
 import { QuestionRecord, QuestionMeta } from './interview/QuestionRecord';
 import { AddQuestion } from './interview/AddQuestion';
 import { ItemSwap } from './interview/ItemSwap';
+import { AddTopic, formatTopicUnit, parseTopicUnit } from './interview/AddTopic';
 import { BehaviouralRecord } from './interview/BehaviouralRecord';
 import { AddBehavioural } from './interview/AddBehavioural';
 import { parseBehaviouralUnit } from '@shared/interview/behavioural';
@@ -841,6 +842,29 @@ function BlockRow({
                 </div>
               );
             }
+            const topic = parseTopicUnit(unit.trailing);
+            if (topic) {
+              // The tag and title are the line's identity, not part of the
+              // note: UnitRecord only ever sees (and rewrites) what follows.
+              return (
+                <div key={unitIdx} className="pt-2">
+                  <h4 className="text-sm font-medium text-stone-800 mb-1">{topic.title}</h4>
+                  <UnitRecord
+                    {...common}
+                    trailing={topic.note}
+                    onChange={(s, t) =>
+                      onToggleUnitStatus(
+                        dateStr,
+                        blockIdx,
+                        unitIdx,
+                        s,
+                        formatTopicUnit(topic.id, topic.title, t),
+                      )
+                    }
+                  />
+                </div>
+              );
+            }
             return parseQuestionUnit(unit.trailing) ? (
               <QuestionRecord
                 key={unitIdx}
@@ -896,6 +920,16 @@ function BlockRow({
             task={name}
             currentId={boundItem}
             onSwap={(id) => onSwapItem(dateStr, name, id)}
+          />
+        )}
+        {name !== '行为故事' && boundItem && !paperId && !isQuestionBlock && !isProblemBlock && (
+          <AddTopic
+            task={name}
+            boundItem={boundItem}
+            presentIds={block.units
+              .map((u) => parseTopicUnit(u.trailing)?.id)
+              .filter((id): id is string => !!id)}
+            onAdd={(trailing) => onAppendUnit(dateStr, blockIdx, trailing)}
           />
         )}
         {notesBlockIdx >= 0 && (

@@ -103,6 +103,10 @@ export async function computeTouchCounts(): Promise<Record<string, number>> {
       const id = pair.slice(eq + 1).trim();
       if (id) counts[id] = (counts[id] ?? 0) + 1;
     }
+    // Topics appended to a slot after the bound one (`[@id]`, see AddTopic).
+    for (const t of content.matchAll(/^\s+- \[[^\]]\]\s*\[@([a-z0-9-]+)\]/gm)) {
+      counts[t[1]] = (counts[t[1]] ?? 0) + 1;
+    }
   }
   return counts;
 }
