@@ -1,0 +1,35 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const ts = require('typescript');
+const load = require('./helpers/load-typescript.cjs')();
+const code = ts.transpileModule(fs.readFileSync(path.resolve('components/interview/QuestionRecord.tsx'), 'utf8'), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020, esModuleInterop: true },
+}).outputText;
+function find(node, type) {
+  if (!node || typeof node !== 'object') return;
+  if (node.type === type) return node;
+  return [node.props?.children].flat(Infinity).map(n => find(n, type)).find(Boolean);
+}
+for (const ok of [true, false]) test(`day checkbox changes only after successful archive save: ${ok}`, async () => {
+  let index = 0;
+  const states = [true, '我的新答案', '', false, false, false, false];
+  const changes = [];
+  let finish;
+  const response = new Promise(resolve => { finish = resolve; });
+  const exports = {};
+  vm.runInNewContext(code, { exports, require(name) {
+    if (name === 'react') return { useState: () => [states[index++], () => {}], useEffect: () => {}, useRef: () => ({current:null}) };
+    if (name.startsWith('@shared/')) return load(path.resolve('../diary/shared',name.slice(8)+'.ts'));
+    if (name.startsWith('@/') || name === './AttemptHistory') return {};
+    return require(name);
+  }, fetch: () => response, window: { dispatchEvent() {} }, CustomEvent: class {}, setTimeout() {} });
+  const tree = exports.QuestionRecord({index:1,status:'pending',trailing:' [depth-12345678] 分块',dateStr:'2026-09-29',onChange:(...args)=>changes.push(args)});
+  const saving = find(tree,'textarea').props.onBlur();
+  assert.equal(changes.length,0);
+  finish({ok});
+  await saving;
+  assert.equal(changes.length,ok?1:0);
+});

@@ -92,8 +92,10 @@ export function QuestionRecord({
       setSaved(true);
       setTimeout(() => setSaved(false), 1800);
       window.dispatchEvent(new CustomEvent('interview:qbank-updated'));
+      return true;
     } catch {
       setError(true);
+      return false;
     } finally {
       setSaving(false);
     }
@@ -111,23 +113,22 @@ export function QuestionRecord({
   const commitAnswer = async () => {
     const text = answer.trim();
     // Answered is answered; the flag is what says it needs another look.
-    onChange(text ? (parsed.redo ? 'partial' : 'done') : 'pending', compose(parsed.redo, reason));
-    await write({ answer: text });
+    // Preserve legacy day text until its answer has safely reached the archive.
+    if (await write({ answer: text })) {
+      onChange(text ? (parsed.redo ? 'partial' : 'done') : 'pending', compose(parsed.redo, reason));
+    }
   };
 
   const toggleRedo = async () => {
     const next = !parsed.redo;
-    onChange(
-      hasAnswer ? (next ? 'partial' : 'done') : 'pending',
-      compose(next, next ? reason : ''),
-    );
-    await write({ redo: next, redoReason: next ? reason.trim() : '' });
+    if (await write({ redo: next, redoReason: next ? reason.trim() : '' })) {
+      onChange(hasAnswer ? (next ? 'partial' : 'done') : 'pending', compose(next, next ? reason : ''));
+    }
   };
 
   const commitReason = async () => {
     if (!parsed.redo) return;
-    onChange(status, compose(true, reason));
-    await write({ redoReason: reason.trim() });
+    if (await write({ redoReason: reason.trim() })) onChange(status, compose(true, reason));
   };
 
   const chipColor = parsed.redo
@@ -214,7 +215,7 @@ export function QuestionRecord({
             </span>
             {q?.category && (
               <span className="text-[11px] px-1.5 py-0.5 rounded bg-violet-100 text-violet-700">
-                {q.category}
+                {parsed.id.startsWith('depth-') ? 'AI 深度' : q.category}
               </span>
             )}
           </div>
@@ -264,7 +265,7 @@ export function QuestionRecord({
             (hasAnswer || showRef ? (
               <div className="rounded border border-emerald-200 bg-emerald-50 p-2.5">
                 <div className="text-[10px] uppercase tracking-wider text-emerald-600 font-medium mb-1">
-                  参考答案
+                  {parsed.id.startsWith('depth-') ? '准备提示' : '参考答案'}
                 </div>
                 <p className="text-[12px] text-emerald-900 leading-relaxed whitespace-pre-wrap">
                   {q.answer}
