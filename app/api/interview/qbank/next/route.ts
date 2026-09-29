@@ -1,9 +1,11 @@
+import { bankIdForPool } from '@/lib/depthQuestions';
+import { loadQBank } from '@/lib/editorQBank';
 import { resolveServerPaths } from '@/lib/serverPaths';
 import { NextResponse } from 'next/server';
 import { format } from 'date-fns';
 import { loadPlan } from '@/lib/interviewPlan';
-import { loadQBank } from '@shared/interview/load';
-import { bankIdForPool, questionUnitText, recommendQuestions } from '@shared/interview/qbank';
+
+import { questionUnitText, recommendQuestions } from '@shared/interview/qbank';
 
 const DATA_DIR = resolveServerPaths().interviewData;
 

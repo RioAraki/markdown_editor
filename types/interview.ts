@@ -218,6 +218,7 @@ export interface SuggestedStoryQuestion {
 }
 
 export interface TodayPlanResponse {
+  emptyTasks?: Record<string, string>;
   today: string;
   /** Task name → the problems recommended for its checkboxes, in order. */
   suggestedProblems: Record<string, SuggestedProblem[]>;

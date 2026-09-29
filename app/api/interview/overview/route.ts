@@ -1,9 +1,9 @@
+import { loadQBank } from '@/lib/editorQBank';
 import { resolveServerPaths } from '@/lib/serverPaths';
 import { NextResponse } from 'next/server';
 import {
   loadInterviewPlan,
   loadLeetCode,
-  loadQBank,
   loadStories,
   loadResume,
   loadTopicNotes,

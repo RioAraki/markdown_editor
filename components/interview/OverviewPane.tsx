@@ -26,6 +26,8 @@ import type { LeetCodeLog, ProblemBank } from '@shared/interview/leetcode';
 import { useInterview } from '@/contexts/InterviewContext';
 import { serializeInterviewDayDoc } from '@/lib/interviewParser';
 import { getTodayDate } from '@/lib/dateUtils';
+import { depthQuestionId, DEPTH_MODULES } from '@/lib/depthQuestions';
+import { QuestionRecord } from './QuestionRecord';
 import { InterviewAnswerReview } from './InterviewAnswerReview';
 import type { Resume } from '@shared/interview/resume';
 
@@ -104,6 +106,7 @@ export function OverviewPane() {
       for (const m of d.modules) {
         for (const it of m.items) {
           if (it.category) itemsByCategory[it.category] = it.id;
+          if (DEPTH_MODULES.includes(m.id)) itemsByCategory[it.id] = it.id;
         }
       }
     }
@@ -281,7 +284,16 @@ export function OverviewPane() {
         overall={model.overall}
         weekTracks={model.weekTracks}
         notes={bundle?.notes}
-        renderItemDetail={item => (item.item.id.startsWith('bh-') || bundle?.stories?.bank.stories.some(story => story.clusters.some(cluster => cluster.id === item.item.id)))
+        renderItemDetail={item => DEPTH_MODULES.includes(item.moduleId) ? (() => {
+          const id = depthQuestionId(item.item.id);
+          const q = bundle?.qbank.bank.questions.find(q => q.id === id);
+          const rec = bundle?.qbank.log[id];
+          if (!q) return null;
+          return <QuestionRecord index={1} dateStr={today} status={rec?.answers.length ? 'done' : 'pending'}
+            trailing={' [' + id + '] ' + q.question + (rec?.redo ? ' · 待重做' : '')}
+            meta={{ [id]: q }} savedAnswer={{ [id]: rec?.answers.at(-1)?.text ?? '' }}
+            history={{ [id]: rec?.answers ?? [] }} onChange={() => {}} />;
+        })() : (item.item.id.startsWith('bh-') || bundle?.stories?.bank.stories.some(story => story.clusters.some(cluster => cluster.id === item.item.id)))
           ? <InterviewAnswerReview itemId={item.item.id} stories={bundle?.stories} resume={bundle?.resume} days={days} /> : null}
       />
     </div>

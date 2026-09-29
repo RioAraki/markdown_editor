@@ -1,4 +1,5 @@
 'use client';
+import { depthQuestionId } from '@/lib/depthQuestions';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -198,11 +199,12 @@ export function InterviewEditor() {
     problems: Record<number, string>;
   }>({ tasks: {}, problems: {} });
   const [qmeta, setQmeta] = useState<Record<string, QuestionMeta>>({});
+  const [bankProgress, setBankProgress] = useState<Record<string, { total: number; answered: number; redo: number; message: string }>>({});
   const [qanswers, setQanswers] = useState<Record<string, string>>({});
   const loadQBank = useCallback(() => {
     fetch('/api/interview/qbank')
       .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((d: { bank: { questions: QuestionMeta & { id: string }[] }; log: Record<string, { answers: { date: string; text: string }[] }> }) => {
+      .then((d: { blockProgress?: typeof bankProgress; bank: { questions: QuestionMeta & { id: string }[] }; log: Record<string, { answers: { date: string; text: string }[] }> }) => {
         const meta: Record<string, QuestionMeta> = {};
         for (const q of d.bank.questions as unknown as (QuestionMeta & { id: string })[]) {
           meta[q.id] = {
@@ -213,6 +215,7 @@ export function InterviewEditor() {
           };
         }
         setQmeta(meta);
+        setBankProgress(d.blockProgress ?? {});
         const latest: Record<string, string> = {};
         const hist: Record<string, AttemptEntry[]> = {};
         for (const [id, rec] of Object.entries(d.log ?? {})) {
@@ -429,6 +432,7 @@ export function InterviewEditor() {
                 topicName={topicName}
                 attempts={attempts}
                 qhistory={qhistory}
+                bankProgress={bankProgress}
                 paperIds={paperIds}
                 onOpenPaper={setOpenPaper}
                 cmeta={cmeta}
@@ -460,6 +464,7 @@ function DayCard({
   topicName,
   attempts,
   qhistory,
+  bankProgress,
   paperIds,
   onOpenPaper,
   cmeta,
@@ -481,6 +486,7 @@ function DayCard({
   topicName: Record<string, string>;
   attempts: Record<number, AttemptEntry[]>;
   qhistory: Record<string, AttemptEntry[]>;
+  bankProgress: Record<string, { total: number; answered: number; redo: number; message: string }>;
   paperIds: string[];
   onOpenPaper: (id: string) => void;
   cmeta: Record<string, ChallengeMeta>;
@@ -553,6 +559,7 @@ function DayCard({
               topicName={topicName}
               attempts={attempts}
               qhistory={qhistory}
+                bankProgress={bankProgress}
               paperIds={paperIds}
               onOpenPaper={onOpenPaper}
               cmeta={cmeta}
@@ -636,6 +643,7 @@ function BlockRow({
   topicName,
   attempts,
   qhistory,
+  bankProgress,
   paperIds,
   onOpenPaper,
   cmeta,
@@ -661,6 +669,7 @@ function BlockRow({
   topicName: Record<string, string>;
   attempts: Record<number, AttemptEntry[]>;
   qhistory: Record<string, AttemptEntry[]>;
+  bankProgress: Record<string, { total: number; answered: number; redo: number; message: string }>;
   paperIds: string[];
   onOpenPaper: (id: string) => void;
   cmeta: Record<string, ChallengeMeta>;
@@ -731,7 +740,11 @@ function BlockRow({
     const total = block.units.length;
     const allDone = doneCount === total && total > 0;
     const isProblemBlock = block.units.some((u) => /#\d+/.test(u.trailing));
-    const isQuestionBlock = block.units.some((u) => !!parseQuestionUnit(u.trailing));
+    const isQuestionBlock = name === 'AI 深度' || block.units.some((u) => !!parseQuestionUnit(u.trailing));
+    const progress = bankProgress[name];
+    if (progress && block.units.every(u => u.trailing.trim().startsWith('[module-complete]') || (name !== 'AI 深度' && !u.trailing.trim()))) {
+      return <div className="py-3 text-sm"><p className="font-medium text-stone-800">{name}</p><p className="mt-2 text-emerald-700">{progress.message}</p>{progress.answered < progress.total && <AddQuestion units={block.units} blockName={name} onAdd={t => onAppendUnit(dateStr, blockIdx, t)} />}</div>;
+    }
     // A paper slot is identified by what the day bound it to, not by the unit
     // text — the checkbox itself is blank until the paper file says otherwise.
     const boundItem = itemsByTask[name];
@@ -843,6 +856,10 @@ function BlockRow({
               );
             }
             const topic = parseTopicUnit(unit.trailing);
+            if (name === 'AI 深度' && !parseQuestionUnit(unit.trailing)) {
+              const id = depthQuestionId(topic?.id ?? boundItem ?? '');
+              if (qmeta[id]) return <QuestionRecord key={unitIdx} {...common} trailing={' [' + id + '] ' + qmeta[id].question} meta={qmeta} savedAnswer={qanswers} history={qhistory} />;
+            }
             if (topic) {
               // The tag and title are the line's identity, not part of the
               // note: UnitRecord only ever sees (and rewrites) what follows.
@@ -900,7 +917,11 @@ function BlockRow({
         />}
         {isQuestionBlock && (
           <AddQuestion
-            units={block.units}
+            units={name === 'AI 深度' ? block.units.map(u => {
+              if (parseQuestionUnit(u.trailing)) return u;
+              const id = parseTopicUnit(u.trailing)?.id ?? boundItem;
+              return id ? { ...u, trailing: `[${depthQuestionId(id)}]` } : u;
+            }) : block.units}
             blockName={name}
             onAdd={(trailing) => onAppendUnit(dateStr, blockIdx, trailing)}
           />

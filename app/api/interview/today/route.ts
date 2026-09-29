@@ -1,3 +1,5 @@
+import { bankIdForPool } from '@/lib/depthQuestions';
+import { loadQBank } from '@/lib/editorQBank';
 import { resolveServerPaths } from '@/lib/serverPaths';
 import { NextResponse } from 'next/server';
 import { format } from 'date-fns';
@@ -12,13 +14,12 @@ import {
 import {
   loadInterviewPlan,
   loadLeetCode,
-  loadQBank,
   loadPapers,
   loadStories,
 } from '@shared/interview/load';
 import { parseProblemUnit } from '@shared/interview/leetcode';
 import { QBANK_REDO_DAYS, parseQuestionUnit } from '@shared/interview/qbank';
-import { bankIdForPool, recommendQuestions } from '@shared/interview/qbank';
+import { recommendQuestions } from '@shared/interview/qbank';
 import { carryOver, dayFromBlocks } from '@shared/interview/core';
 import {
   parseStoryUnit,
@@ -297,6 +298,7 @@ export async function GET(req: Request) {
     // item id → bank category, and back again: the slot's category follows the
     // questions, not the other way round.
     const itemOfCategory: Record<string, string> = {};
+    for (const q of qbank.bank.questions.filter(q => q.bank === 'depth')) itemOfCategory[q.category] = q.category;
     for (const [id, cat] of Object.entries(categoryOf)) itemOfCategory[cat] = id;
 
     for (const task of suggestion?.tasks ?? []) {
@@ -347,7 +349,7 @@ export async function GET(req: Request) {
         .map((u) => parseQuestionUnit(u)?.id)
         .filter((id): id is string => !!id)
         .map((id) => qbank.bank.questions.find((q) => q.id === id))
-        .filter((q): q is NonNullable<typeof q> => !!q);
+        .filter((q): q is NonNullable<typeof q> => !!q && (q.bank ?? "agent") === bankId);
 
       const carriedQ = resumeQ.map((q) => ({
         id: q.id,
@@ -421,6 +423,7 @@ export async function GET(req: Request) {
 
     const response: TodayPlanResponse = {
       today,
+      emptyTasks: Object.fromEntries(Object.entries(suggestedQuestions).filter(([, qs]) => !qs.length).map(([name]) => [name, qbank.blockProgress[name]?.message ?? "暂无可安排的题目"])),
       suggestedQuestions,
       suggestedStories,
       suggestion,

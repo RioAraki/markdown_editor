@@ -18,6 +18,7 @@ export function dayProgress(doc: InterviewDayDoc): {
       total += c.total;
     } else if (block.kind === 'task-units') {
       for (const u of block.units) {
+        if (u.trailing.trim().startsWith('[module-complete]')) continue;
         const c = counts(u.status);
         done += c.done;
         total += c.total;

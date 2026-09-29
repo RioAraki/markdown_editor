@@ -1,9 +1,10 @@
+import { loadQBank } from '@/lib/editorQBank';
 import { resolveServerPaths } from '@/lib/serverPaths';
 import { NextResponse } from 'next/server';
 import { guardedPromises as fs } from '@/lib/guardedFs';
 import path from 'path';
 import { format } from 'date-fns';
-import { loadQBank } from '@shared/interview/load';
+
 import { allQuestionStates, qbankDebt } from '@shared/interview/qbank';
 import {
   newQuestionDoc,
@@ -19,10 +20,11 @@ const docPath = (id: string) => path.join(QBANK_DIR, `${id}.md`);
 /** Bank + your archive + derived state. */
 export async function GET() {
   try {
-    const { bank, log } = await loadQBank(DATA_DIR);
+    const { bank, log, blockProgress } = await loadQBank(DATA_DIR);
     const today = format(new Date(), 'yyyy-MM-dd');
     return NextResponse.json({
       bank,
+      blockProgress,
       log,
       states: allQuestionStates(bank, log, today),
       debt: qbankDebt(bank, log, today),
@@ -57,7 +59,7 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
     }
     const date = body.date ?? format(new Date(), 'yyyy-MM-dd');
-    const { bank } = await loadQBank(DATA_DIR);
+    const { bank, log } = await loadQBank(DATA_DIR);
     const question = bank.questions.find((q) => q.id === body.id);
     if (!question) {
       return NextResponse.json({ error: 'unknown question id' }, { status: 404 });
@@ -68,7 +70,10 @@ export async function PUT(req: Request) {
       .readFile(file, 'utf-8')
       .then(parseQuestionDoc)
       .catch(() => null);
-    if (!doc) doc = newQuestionDoc(question);
+    if (!doc) {
+      doc = newQuestionDoc(question);
+      doc.answers = log[body.id]?.answers ?? [];
+    }
 
     // Keep the bank's text authoritative — it may have been corrected upstream.
     doc.question = question.question;

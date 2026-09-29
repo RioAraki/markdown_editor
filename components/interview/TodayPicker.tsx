@@ -34,6 +34,7 @@ import {
  * left out of the list, so this can only add.
  */
 function TopUp({
+  emptyTasks,
   missing,
   chosen,
   setChosen,
@@ -44,6 +45,7 @@ function TopUp({
   loading,
   onRetry,
 }: {
+  emptyTasks?: Record<string, string>;
   missing: BlockLite[];
   chosen: string[];
   setChosen: (f: (cur: string[]) => string[]) => void;
@@ -110,6 +112,7 @@ function TopUp({
               );
             })}
           </div>
+          {Object.entries(emptyTasks ?? {}).map(([name, message]) => <p key={name} className="text-xs text-emerald-700 mb-2">{name} · {message}</p>)}
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -314,6 +317,7 @@ export function TodayPicker() {
     if (missing.length === 0) return null;
     return (
       <TopUp
+        emptyTasks={ready ? data?.emptyTasks : undefined}
         missing={missing}
         chosen={availableSelection}
         setChosen={setChosenBlocks}
@@ -392,6 +396,7 @@ export function TodayPicker() {
                   }}
                   problems={data.suggestedProblems?.[task.name] ?? []}
                   questions={data.suggestedQuestions?.[task.name] ?? []}
+                  emptyMessage={data.emptyTasks?.[task.name]}
                   challenges={data.suggestedStories?.[task.name] ?? []}
                   candidates={(data.choices ?? []).filter(
                     (c) =>
@@ -499,6 +504,7 @@ export function TodayPicker() {
 }
 
 function SlotRow({
+  emptyMessage,
   task,
   emoji,
   trackLabel,
@@ -513,6 +519,7 @@ function SlotRow({
   questions,
   challenges,
 }: {
+  emptyMessage?: string;
   task: PlanTaskLite;
   emoji: string;
   trackLabel: string;
@@ -542,6 +549,7 @@ function SlotRow({
     return pool.filter((c) => c.title.toLowerCase().includes(k)).slice(0, 40);
   }, [candidates, q]);
 
+  if (emptyMessage) return <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{task.name} · {emptyMessage}</div>;
   return (
     <div className="rounded-lg border border-stone-200 bg-stone-50/60">
       <div className="px-3 py-2.5">

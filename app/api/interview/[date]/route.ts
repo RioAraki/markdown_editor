@@ -1,3 +1,4 @@
+import { loadQBank } from '@/lib/editorQBank';
 import { resolveServerPaths } from '@/lib/serverPaths';
 import { NextResponse } from 'next/server';
 import {
@@ -17,7 +18,7 @@ import { dayFromBlocks } from '@shared/interview/core';
 import { flattenInventory, loadInventory, loadMastery } from '@/lib/interviewInventory';
 import path from 'path';
 import { guardedPromises as fs } from '@/lib/guardedFs';
-import { loadLeetCode, loadQBank } from '@shared/interview/load';
+import { loadLeetCode } from '@shared/interview/load';
 import { parseQuestionUnit, questionUnitText } from '@shared/interview/qbank';
 import { behaviouralUnitText } from '@shared/interview/behavioural';
 import { loadStories } from '@shared/interview/load';
@@ -420,13 +421,17 @@ export async function POST(req: Request, context: RouteContext) {
 
     // 题库 slots name their concrete questions the same way 刷题 does.
     if (body.questions && Object.keys(body.questions).length > 0) {
-      const { bank } = await loadQBank(DATA_DIR);
+      const { bank, blockProgress } = await loadQBank(DATA_DIR);
       const byId = new Map(bank.questions.map((q) => [q.id, q]));
       for (const [task, ids] of Object.entries(body.questions)) {
         unitTexts[task] = ids
           .map((id) => byId.get(id))
           .filter((q): q is NonNullable<typeof q> => !!q)
           .map((q) => questionUnitText(q));
+        if (!unitTexts[task].length && blockProgress[task]) {
+          unitTexts[task] = [`[module-complete] ${blockProgress[task].message}`];
+          delete binding[task];
+        }
       }
     }
 
