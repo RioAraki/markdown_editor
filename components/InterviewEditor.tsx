@@ -858,7 +858,10 @@ function BlockRow({
             const topic = parseTopicUnit(unit.trailing);
             if (name === 'AI 深度' && !parseQuestionUnit(unit.trailing)) {
               const id = depthQuestionId(topic?.id ?? boundItem ?? '');
-              if (qmeta[id]) return <QuestionRecord key={unitIdx} {...common} trailing={' [' + id + '] ' + qmeta[id].question} meta={qmeta} savedAnswer={qanswers} history={qhistory} />;
+              if (qmeta[id]) return <QuestionRecord key={unitIdx} {...common} trailing={' [' + id + '] ' + qmeta[id].question} meta={qmeta} savedAnswer={qanswers} history={qhistory}
+                // Keep legacy answer text intact while the dated archive is saved.
+                // Day autosave and archive writes are independent requests.
+                onChange={s => onToggleUnitStatus(dateStr, blockIdx, unitIdx, s, unit.trailing)} />;
             }
             if (topic) {
               // The tag and title are the line's identity, not part of the
