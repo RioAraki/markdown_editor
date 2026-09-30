@@ -27,6 +27,7 @@ function reset() {
 const load = makeLoader();
 const daily = load(path.resolve('app/api/interview/today/route.ts'));
 const next = load(path.resolve('app/api/interview/leetcode/next/route.ts'));
+const attemptsRoute = load(path.resolve('app/api/interview/leetcode/route.ts'));
 // GET /today accepts no date; freeze only the wall clock, not scheduling logic.
 const RealDate = Date;
 test.before(() => { global.Date = class extends RealDate {
@@ -49,6 +50,23 @@ const requestNext = async (body) => {
   assert.equal(response.status, 200);
   return (await response.json()).problems;
 };
+
+test('tomorrow review persists through API and wins both daily generation and additions', async () => {
+  reset();
+  const put = (body) => attemptsRoute.PUT(new Request('http://localhost/api/interview/leetcode', {
+    method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body),
+  }));
+  const body={problemId:101,date:'2026-09-07',outcome:'clean',redo:true,redoOn:today,note:'边界再练一次'};
+  assert.equal((await put({...body,redoOn:'2026-02-30'})).status,400);
+  assert.equal((await put(body)).status,200);
+  const persisted=JSON.parse(fs.readFileSync(path.join(dir,'leetcode-log.json')))[101].attempts.at(-1);
+  assert.equal(persisted.redoOn,today);
+  assert.equal((await requestNext({date:today,count:1}))[0].id,101);
+  const dailyResponse=await daily.GET(new Request('http://localhost/api/interview/today?blocks=leetcode'));
+  assert.equal((await dailyResponse.json()).suggestedProblems['刷题'][0].id,101);
+  assert.equal((await put({...body,redo:false,redoOn:undefined})).status,200);
+  assert.notEqual((await requestNext({date:today,count:1}))[0].id,101);
+});
 
 test('daily carry-over stays inside the six-slot ratio and cannot revive unflagged outcomes', async () => {
   reset();

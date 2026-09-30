@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { addDays, format } from 'date-fns';
 import { ExternalLink, Lightbulb, Loader2, RotateCcw } from 'lucide-react';
 import {
   OUTCOME_HINT,
@@ -8,6 +9,7 @@ import {
   OUTCOME_ORDER,
   Outcome,
   REDO_LABEL,
+  TOMORROW_REDO_LABEL,
   parseProblemRecord,
   redoHintIn,
 } from '@shared/interview/leetcode';
@@ -71,6 +73,7 @@ function decompose(trailing: string): {
   head: string;
   outcome?: Outcome;
   redo: boolean;
+  redoOn?: string;
   note: string;
 } {
   const raw = trailing.trim();
@@ -82,6 +85,7 @@ function decompose(trailing: string): {
     head: rec.head,
     outcome: rec.outcome,
     redo: rec.redo,
+    redoOn: rec.redoOn,
     note: rec.note,
   };
 }
@@ -91,6 +95,7 @@ function compose(
   outcome: Outcome | undefined,
   redo: boolean,
   note: string,
+  redoOn?: string,
 ): string {
   // A checkbox is exactly one markdown line. A newline in the note would end
   // the list item and orphan every later unit, so fold them into separators.
@@ -98,7 +103,7 @@ function compose(
   const parts = [
     head,
     outcome ? OUTCOME_LABEL[outcome] : '',
-    redo ? REDO_LABEL : '',
+    redo ? (redoOn ? `${TOMORROW_REDO_LABEL} ${redoOn}` : REDO_LABEL) : '',
     flat,
   ]
     .map((p) => p.trim())
@@ -187,7 +192,7 @@ export function UnitRecord({
     if (!open) setNote(decompose(trailing).note);
   }, [trailing, open]);
 
-  const recordAttempt = async (outcome: Outcome | null, redo?: boolean) => {
+  const recordAttempt = async (outcome: Outcome | null, redo?: boolean, redoOn = parts.redoOn) => {
     if (!isProblem) return;
     setSaving(true);
     setError(false);
@@ -199,6 +204,7 @@ export function UnitRecord({
           problemId: parts.problemId,
           outcome,
           redo: redo ?? parts.redo,
+          redoOn: outcome && (redo ?? parts.redo) ? redoOn || undefined : undefined,
           date: dateStr,
           note: note.trim() || undefined,
         }),
@@ -207,8 +213,10 @@ export function UnitRecord({
       // The overview computes topic progress from leetcode-log.json, which the
       // server just rewrote — tell it to re-read so the bars move now.
       window.dispatchEvent(new CustomEvent('interview:leetcode-updated'));
+      return true;
     } catch {
       setError(true);
+      return false;
     } finally {
       setSaving(false);
     }
@@ -218,24 +226,32 @@ export function UnitRecord({
     const next = parts.outcome === o ? undefined : o;
     onChange(
       next ? (next === 'clean' ? 'done' : 'partial') : 'pending',
-      compose(parts.head, next, parts.redo, note),
+      compose(parts.head, next, parts.redo, note, next ? parts.redoOn : undefined),
     );
     await recordAttempt(next ?? null);
   };
 
   const toggleRedo = async () => {
     const next = !parts.redo;
-    onChange(status, compose(parts.head, parts.outcome, next, note));
     // Only meaningful once there is an attempt to attach it to.
-    if (parts.outcome) await recordAttempt(parts.outcome, next);
+    if (parts.outcome && !await recordAttempt(parts.outcome, next, '')) return;
+    onChange(status, compose(parts.head, parts.outcome, next, note));
+  };
+
+  const toggleTomorrow = async () => {
+    if (!parts.outcome || saving) return;
+    const nextDate = parts.redoOn ? '' : format(addDays(new Date(), 1), 'yyyy-MM-dd');
+    const redo = !!nextDate;
+    if (!await recordAttempt(parts.outcome, redo, nextDate)) return;
+    onChange(status, compose(parts.head, parts.outcome, redo, note, nextDate));
   };
 
   const pickStatus = (s: UnitStatus) => {
-    onChange(s, compose(parts.head, parts.outcome, parts.redo, note));
+    onChange(s, compose(parts.head, parts.outcome, parts.redo, note, parts.redoOn));
   };
 
   const commitNote = () => {
-    onChange(status, compose(parts.head, parts.outcome, parts.redo, note));
+    onChange(status, compose(parts.head, parts.outcome, parts.redo, note, parts.redoOn));
   };
 
   const chipColor =
@@ -276,7 +292,7 @@ export function UnitRecord({
             <span className="block text-[11px] text-stone-500 mt-0.5 truncate">
               {parts.redo && (
                 <span className="mr-1 px-1 rounded bg-rose-100 text-rose-700 font-medium">
-                  待重做
+                  {parts.redoOn ? `${parts.redoOn} 优先重做` : '待重做'}
                 </span>
               )}
               {summary}
@@ -319,7 +335,7 @@ export function UnitRecord({
                   onClick={toggleRedo}
                   disabled={saving}
                   title={
-                    parts.redo
+                    parts.redoOn ? `已安排 ${parts.redoOn} 优先重做，点击取消` : parts.redo
                       ? '已标记待重做，间隔至少 7 天后按两新一旧安排。再点一下取消'
                       : '标记这题要重做，间隔至少 7 天后进入两新一旧的老题队列'
                   }
@@ -333,6 +349,20 @@ export function UnitRecord({
                 >
                   <RotateCcw className="w-3 h-3" />
                   {parts.redo ? '待重做' : '标记重做'}
+                </button>
+                <button
+                  type="button"
+                  onClick={toggleTomorrow}
+                  disabled={saving || !parts.outcome}
+                  aria-pressed={!!parts.redoOn}
+                  title={!parts.outcome ? '先记录本次做得怎么样，再安排明天重做' :
+                    parts.redoOn ? `已安排 ${parts.redoOn}，再点取消` :
+                    '次日优先出现，不受 7 天间隔和两新一旧配额限制'}
+                  className={`text-[11px] px-2 py-1 rounded border disabled:opacity-50 ${parts.redoOn
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-white text-indigo-600 border-indigo-300 hover:bg-indigo-50'}`}
+                >
+                  {parts.redoOn ? `已安排 ${parts.redoOn} · 取消` : '明天立刻重做'}
                 </button>
                 <a
                   href={
@@ -403,7 +433,7 @@ export function UnitRecord({
                     </div>
                   )}
                   <p className="text-[10px] text-stone-400">
-                    {parts.redo
+                    {parts.redoOn ? `已安排 ${parts.redoOn} 优先重做 · 不受普通重做间隔与配额限制` : parts.redo
                       ? '已标记待重做 · 间隔至少 7 天后，按两新一旧安排'
                       : '未标记待重做，不会因为结果评分再次推荐'}
                   </p>

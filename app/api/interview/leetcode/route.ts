@@ -66,6 +66,7 @@ export async function PUT(req: Request) {
       date?: string;
       note?: string;
       redo?: boolean;
+      redoOn?: string;
     } = await req.json();
 
     if (typeof body.problemId !== 'number') {
@@ -75,6 +76,13 @@ export async function PUT(req: Request) {
       );
     }
     const date = body.date ?? format(new Date(), 'yyyy-MM-dd');
+    if (body.redoOn !== undefined && (typeof body.redoOn !== 'string' ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(body.redoOn) ||
+        !Number.isFinite(Date.parse(`${body.redoOn}T00:00:00Z`)) ||
+        new Date(`${body.redoOn}T00:00:00Z`).toISOString().slice(0, 10) !== body.redoOn ||
+        body.redoOn <= date || body.redo !== true || !body.outcome || !OUTCOME_ORDER.includes(body.outcome))) {
+      return NextResponse.json({ error: 'Invalid priority review date or missing outcome' }, { status: 400 });
+    }
     const key = String(body.problemId);
 
     const { log } = await loadLeetCode(DATA_DIR);
@@ -87,6 +95,7 @@ export async function PUT(req: Request) {
       const attempt: Attempt = { date, outcome: body.outcome };
       if (body.note) attempt.note = body.note;
       if (body.redo) attempt.redo = true;
+      if (body.redo && body.redoOn) attempt.redoOn = body.redoOn;
       entry.attempts.push(attempt);
     }
     entry.attempts.sort((a, b) => a.date.localeCompare(b.date));

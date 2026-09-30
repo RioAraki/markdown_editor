@@ -272,6 +272,7 @@ export async function GET(req: Request) {
         itemId: topic?.itemId ?? null,
         courseOrder: remaining,
         count: Math.max(1, task.units),
+        includeAllPriority: true,
         today,
         exclude: usedProblems,
         // Carry-over is a preference inside the same eligibility and ratio
