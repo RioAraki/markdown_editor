@@ -24,6 +24,7 @@ export function FollowUpChain({ items, recordingPrefix, storyId, questionId, get
   const [adding, setAdding] = useState(false);
   const [question, setQuestion] = useState('');
   const [quote, setQuote] = useState('');
+  const [initialAnswer, setInitialAnswer] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('all');
@@ -41,9 +42,9 @@ export function FollowUpChain({ items, recordingPrefix, storyId, questionId, get
   const createDraftKey = `interview-follow-up-create:${storyId}:${questionId}`;
   useEffect(() => {
     const draft = draftObject(createDraftKey);
-    if (draft) { setQuestion(draft.question); setQuote(draft.quote); createId.current = draft.id ?? ''; setAdding(true); }
+    if (draft) { setQuestion(draft.question); setQuote(draft.quote); setInitialAnswer(draft.answer ?? ''); createId.current = draft.id ?? ''; setAdding(true); }
   }, [createDraftKey]);
-  const keepCreate = (q: string, source: string) => draftWrite(createDraftKey, JSON.stringify({ question: q, quote: source, id: createId.current }));
+  const keepCreate = (q: string, source: string, answer = initialAnswer) => draftWrite(createDraftKey, JSON.stringify({ question: q, quote: source, answer, id: createId.current }));
   useEffect(() => { if (!pending.current) setLocal(items); }, [items]);
   const save = useCallback<Save>((patch) => {
     pending.current++;
@@ -69,9 +70,9 @@ export function FollowUpChain({ items, recordingPrefix, storyId, questionId, get
       // Stable random decimal ID also works on a LAN HTTP origin; retries reuse it.
       if (!createId.current) createId.current = Array.from(crypto.getRandomValues(new Uint32Array(4)), n => n.toString().padStart(10, '0')).join('');
       keepCreate(question, quote);
-      await save({ followUpAction: 'create', followUpId: createId.current, followUpQuestion: question.trim(), followUpQuote: quote });
+      await save({ followUpAction: 'create', followUpId: createId.current, followUpQuestion: question.trim(), followUpQuote: quote, followUpAnswer: initialAnswer });
       draftWrite(createDraftKey, null);
-      setLastAdded(createId.current); createId.current = ''; setQuestion(''); setQuote(''); setAdding(false); setFilter('all');
+      setLastAdded(createId.current); createId.current = ''; setQuestion(''); setQuote(''); setInitialAnswer(''); setAdding(false); setFilter('all');
     } catch (e) { setError(e instanceof Error ? e.message : '保存失败，请重试'); }
     finally { submitting.current = false; setBusy(false); }
   }
@@ -86,7 +87,7 @@ export function FollowUpChain({ items, recordingPrefix, storyId, questionId, get
       return { ...f, ...(answerDraft !== null ? { answer: answerDraft } : {}),
         ...(editDraft ? { q: editDraft.question, quote: editDraft.quote } : {}), ...snapshots.current.get(f.id)?.() };
     });
-    if ((question.trim() || quote.trim()) && !all.some(f => f.id === createId.current)) all.push({ id: 'unsaved', q: question, quote, status: 'todo' });
+    if ((question.trim() || quote.trim()) && !all.some(f => f.id === createId.current)) all.push({ id: 'unsaved', q: question, quote, answer: initialAnswer, status: initialAnswer.trim() ? 'draft' : 'todo' });
     return interviewContext(getContext?.() ?? { question: questionId }, all, focus);
   }
   useEffect(() => {
@@ -99,15 +100,16 @@ export function FollowUpChain({ items, recordingPrefix, storyId, questionId, get
       <span className="text-xs font-medium text-stone-700">Follow Up <span className="text-[11px] font-normal text-stone-400">{active.length} 条 · {remaining} 条待准备</span></span>
       <div className="flex items-center gap-2 flex-wrap">
         {getQuote && <button type="button" className={button} disabled={busy} onMouseDown={e => e.preventDefault()} onClick={() => { const source = getQuote(); setQuote(source); keepCreate(question, source); setAdding(true); }}>引用选中的原话</button>}
-        <button type="button" className={button + ' border-indigo-300 text-indigo-700'} disabled={busy} onClick={() => setAdding(true)}>＋ 记一个追问</button>
+        <button type="button" className={button + ' border-indigo-300 text-indigo-700'} disabled={busy} onClick={() => setAdding(true)}>＋ 自定义追问</button>
       </div>
     </div>
-    <p className="text-[10px] text-stone-400">只写问题即可保存，何时准备由你决定。追问状态不影响主问题，也不会自动排入每日任务。</p>
+    <p className="text-[10px] text-stone-400">记录实际面试遇到的追问，也可以自己补充问题。只写问题即可保存，答案可稍后准备。追问状态不影响主问题，也不会自动排入每日任务。</p>
     {getContext && <CopyInterviewContext getText={contextText} />}
     {adding && <form className="rounded border border-indigo-200 bg-indigo-50/40 p-2.5 space-y-2" onSubmit={e => { e.preventDefault(); void create(); }}>
-      <label htmlFor={inputId} className="text-[11px] text-stone-600">可能被追问什么？</label>
+      <label htmlFor={inputId} className="text-[11px] text-stone-600">面试官问了什么，或你想补充什么追问？</label>
       <input id={inputId} aria-label="追问问题" className={field} required maxLength={2000} value={question} disabled={busy} onChange={e => { setQuestion(e.target.value); keepCreate(e.target.value, quote); }} placeholder="例如：选错模块后，怎么发现并纠正？" autoFocus />
       <label className="block text-[11px] text-stone-500">触发追问的原话（可选）<textarea aria-label="触发追问的原话" className={field + ' mt-1'} rows={2} maxLength={10000} value={quote} disabled={busy} onChange={e => { setQuote(e.target.value); keepCreate(question, e.target.value); }} placeholder="保留当时的原话，之后修改主答案也不会丢失上下文" /></label>
+      <label className="block text-[11px] text-stone-500">我的回答 / 准备笔记（可选）<textarea aria-label="自定义追问的初始回答" className={field + ' mt-1'} rows={4} value={initialAnswer} disabled={busy} onChange={e => { setInitialAnswer(e.target.value); keepCreate(question, quote, e.target.value); }} placeholder="可以记录面试时的回答，也可以整理下次准备怎么回答。暂时没有答案也可以先保存问题。" /></label>
       <div className="flex gap-2"><button type="submit" className={button} disabled={busy || !question.trim()}>{busy ? '保存中…' : '记下来'}</button><button type="button" className={button} disabled={busy} onClick={() => { setAdding(false); setError(''); }}>收起草稿</button></div>
       {error && <p role="alert" className="text-xs text-rose-700">{error} · 输入已保留，可再次点击「记下来」。</p>}
     </form>}
@@ -119,7 +121,7 @@ export function FollowUpChain({ items, recordingPrefix, storyId, questionId, get
 
 function draftRead(key: string) { try { return window.sessionStorage.getItem(key); } catch { return null; } }
 function draftWrite(key: string, text: string | null) { try { if (text === null) window.sessionStorage.removeItem(key); else window.sessionStorage.setItem(key, text); } catch { /* Keep the in-memory draft when storage is unavailable. */ } }
-function draftObject(key: string): { question: string; quote: string; id?: string } | null {
+function draftObject(key: string): { question: string; quote: string; answer?: string; id?: string } | null {
   try { const value = JSON.parse(draftRead(key) ?? 'null'); return value && typeof value.question === 'string' && typeof value.quote === 'string' ? value : null; } catch { return null; }
 }
 

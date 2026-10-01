@@ -156,3 +156,16 @@ test('legacy answers without dates never acquire a fabricated creation time', as
   await put({followUpId:'1',followUpAnswer:'updated follow-up'});
   assert.equal(read().followUps[0].createdAt,'unknown');
 });
+
+test('custom question and optional initial answer persist together without changing the main answer', async () => {
+  await put({answer:'original main',status:'spoken'});
+  const parent=read();
+  const payload={followUpAction:'create',followUpId:'800',followUpQuestion:'Actual interview question?',followUpAnswer:'Prepared explanation'};
+  assert.equal((await put(payload)).status,200);
+  const f=read().followUps[0];
+  assert.equal(f.answer,'Prepared explanation'); assert.equal(f.status,'draft');
+  assert.equal(f.createdAt,f.updatedAt); assert.equal(read().answer,parent.answer); assert.equal(read().updatedAt,parent.updatedAt);
+  await put({...payload,followUpAction:'update',followUpAnswer:'Improved explanation'});
+  await put(payload);
+  assert.equal(read().followUps.length,1); assert.equal(read().followUps[0].answer,'Improved explanation');
+});

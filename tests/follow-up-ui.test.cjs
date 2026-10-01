@@ -29,7 +29,7 @@ const flush=()=>new Promise(setImmediate);
 test('empty follow-up list offers creation, preserves quote and prevents double submit',async()=>{
   const requests=[]; let finish;
   const h=harness(async(url,opts)=>{requests.push(JSON.parse(opts.body));await new Promise(r=>finish=r);return {ok:true,json:async()=>({answer:{followUps:[{id:'1',q:'追问',status:'todo'}]}})};});
-  let tree=h.render();const add=find(tree,'button','＋ 记一个追问');assert.ok(add);add.props.onClick();tree=h.render();
+  let tree=h.render();const add=find(tree,'button','＋ 自定义追问');assert.ok(add);add.props.onClick();tree=h.render();
   find(tree,'input','追问问题').props.onChange({target:{value:'模块选错怎么办？'}});
   find(tree,'textarea','触发追问的原话').props.onChange({target:{value:'按需 | 暴露\n工具'}});
   tree=h.render();const form=find(tree,'form');form.props.onSubmit({preventDefault(){}});form.props.onSubmit({preventDefault(){}});await flush();
@@ -39,7 +39,7 @@ test('empty follow-up list offers creation, preserves quote and prevents double 
 
 test('failed creation draft and retry ID survive collapsing and remounting',async()=>{
   const requests=[],storage=new Map();const fetch=async(url,opts)=>{requests.push(JSON.parse(opts.body));return{ok:false,json:async()=>({error:'offline'})};};
-  const h=harness(fetch,storage);let tree=h.render();find(tree,'button','＋ 记一个追问').props.onClick();tree=h.render();find(tree,'input','追问问题').props.onChange({target:{value:'保留这个问题'}});tree=h.render();find(tree,'form').props.onSubmit({preventDefault(){}});await flush();h.unmount();
+  const h=harness(fetch,storage);let tree=h.render();find(tree,'button','＋ 自定义追问').props.onClick();tree=h.render();find(tree,'input','追问问题').props.onChange({target:{value:'保留这个问题'}});tree=h.render();find(tree,'form').props.onSubmit({preventDefault(){}});await flush();h.unmount();
   const again=harness(fetch,storage);again.render();tree=again.render();assert.equal(find(tree,'input','追问问题').props.value,'保留这个问题');find(tree,'form').props.onSubmit({preventDefault(){}});await flush();assert.equal(requests[0].followUpId,requests[1].followUpId);
 });
 
@@ -57,7 +57,7 @@ test('question edit draft survives remount and its fields lock during save',asyn
 });
 test('failed creation retains draft and retry uses the same follow-up identity',async()=>{
   const requests=[];const h=harness(async(url,opts)=>{requests.push(JSON.parse(opts.body));return {ok:false,json:async()=>({error:'保存失败'})};});
-  let tree=h.render();find(tree,'button','＋ 记一个追问').props.onClick();tree=h.render();find(tree,'input','追问问题').props.onChange({target:{value:'为什么？'}});
+  let tree=h.render();find(tree,'button','＋ 自定义追问').props.onClick();tree=h.render();find(tree,'input','追问问题').props.onChange({target:{value:'为什么？'}});
   tree=h.render();find(tree,'form').props.onSubmit({preventDefault(){}});await flush();tree=h.render();assert.equal(find(tree,'input','追问问题').props.value,'为什么？');
   find(tree,'form').props.onSubmit({preventDefault(){}});await flush();assert.equal(requests[0].followUpId,requests[1].followUpId);
 });
@@ -77,7 +77,7 @@ test('copy includes live drafts, hidden completed follow-ups and unsaved new que
   const h=harness();const props={contextTextRef,getContext:()=>({question:'原题',answer:'主答案草稿'}),items:[{id:'1',q:'旧追问',answer:'旧答案',status:'todo'},{id:'2',q:'已会讲述的追问',status:'spoken'},{id:'3',q:'已移除',deleted:true}]};
   let tree=h.render(props);const child=nodes(tree).find(n=>n.props?.f?.id==='1');child.props.registerDraft('1',()=>({q:'编辑中的问题',answer:'编辑中的答案',quote:'来源草稿'}));
   find(tree,'select','筛选追问').props.onChange({target:{value:'pending'}});tree=h.render(props);
-  find(tree,'button','＋ 记一个追问').props.onClick();tree=h.render(props);find(tree,'input','追问问题').props.onChange({target:{value:'还未提交的新追问'}});tree=h.render(props);
+  find(tree,'button','＋ 自定义追问').props.onClick();tree=h.render(props);find(tree,'input','追问问题').props.onChange({target:{value:'还未提交的新追问'}});tree=h.render(props);
   const text=find(tree,'copy-context').props.getText();
   for(const value of ['原题','主答案草稿','编辑中的问题','编辑中的答案','来源草稿','已会讲述的追问','还未提交的新追问'])assert.ok(text.includes(value),value);
   assert.ok(!text.includes('已移除\n'));assert.ok(!text.includes('旧答案'));
@@ -85,4 +85,22 @@ test('copy includes live drafts, hidden completed follow-ups and unsaved new que
   for(const value of ['原题','主答案草稿','编辑中的问题','编辑中的答案','来源草稿','已会讲述的追问','还未提交的新追问','本轮优先讨论原问题'])assert.ok(mainText.includes(value),value);
   assert.ok(text.includes('优先处理我尚未准备好的追问'));
   h.unmount();assert.equal(contextTextRef.current,null);
+});
+
+
+test('custom follow-up retains an optional answer through failure and remount, and copies it before saving', async () => {
+  const storage=new Map(); const requests=[];
+  const fetch=async(url,opts)=>{requests.push(JSON.parse(opts.body));return {ok:false,json:async()=>({error:'offline'})};};
+  const h=harness(fetch,storage); let tree=h.render({getContext:()=>({question:'主问题'})});
+  find(tree,'button','＋ 自定义追问').props.onClick(); tree=h.render();
+  find(tree,'input','追问问题').props.onChange({target:{value:'面试官的实际追问'}}); tree=h.render();
+  find(tree,'textarea','自定义追问的初始回答').props.onChange({target:{value:'我的准备答案'}}); tree=h.render({getContext:()=>({question:'主问题'})});
+  assert.ok(find(tree,'copy-context').props.getText().includes('我的准备答案'));
+  find(tree,'form').props.onSubmit({preventDefault(){}}); await flush();
+  assert.equal(requests[0].followUpAnswer,'我的准备答案'); h.unmount();
+  const again=harness(fetch,storage); again.render(); tree=again.render();
+  assert.equal(find(tree,'input','追问问题').props.value,'面试官的实际追问');
+  assert.equal(find(tree,'textarea','自定义追问的初始回答').props.value,'我的准备答案');
+  find(tree,'form').props.onSubmit({preventDefault(){}}); await flush();
+  assert.equal(requests[1].followUpId,requests[0].followUpId); again.unmount();
 });
