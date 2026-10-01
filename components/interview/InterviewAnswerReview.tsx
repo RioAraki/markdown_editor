@@ -8,6 +8,7 @@ import type { InterviewDayDoc } from '@/types/interview';
 import { RecordingPanel } from './RecordingPanel';
 import { CopyInterviewContext } from './CopyInterviewContext';
 import { interviewContext } from '@/lib/interviewContext';
+import { QuestionOrder } from './QuestionOrder';
 import { CustomResumeQuestion } from './CustomResumeQuestion';
 import { AnswerTimestamps } from './AnswerTimestamps';
 import { AttemptHistory } from './AttemptHistory';
@@ -26,6 +27,7 @@ export function InterviewAnswerReview({ itemId, stories, days, resume }: {
   if (story && cluster) return <div className="space-y-2" aria-label="简历问题与历史回答">
     <p className="text-[11px] text-stone-400">逐题回看与修改 · 主问题、追问、回答状态与全部本地录音</p>
     <CustomResumeQuestion key={cluster.id} storyId={story.id} clusterId={cluster.id} onCreated={setCreatedId} />
+    <QuestionOrder key={`order:${cluster.id}`} storyId={story.id} clusterId={cluster.id} questions={cluster.questions} />
     {cluster.questions.map(question => <ResumeAnswer key={question.id} initiallyOpen={createdId === question.id} storyId={story.id} storyTitle={story.title} clusterTitle={cluster.title} resume={resume} resumeAnchor={cluster.resumeAnchor ?? story.resumeAnchor} question={question} answer={stories?.answers[story.id]?.[question.id]} />)}
   </div>;
   if (!itemId.startsWith('bh-')) return null;

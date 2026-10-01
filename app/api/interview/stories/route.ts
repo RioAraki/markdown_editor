@@ -301,3 +301,48 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: '保存问题失败，请重试；已有数据未覆盖' }, { status: 500 });
   }
 }
+
+
+/** Save a category's question order without changing question or answer identities. */
+export async function PATCH(req: Request) {
+  try {
+    const body = await req.json();
+    const validIds = (value: unknown): value is string[] => Array.isArray(value) && value.length <= 2000 && value.every(id => typeof id === 'string') && new Set(value).size === value.length;
+    if (!body || typeof body.storyId !== 'string' || typeof body.clusterId !== 'string' || !validIds(body.questionIds) || !validIds(body.expectedOrder)) {
+      return NextResponse.json({ error: '无效的题目顺序' }, { status: 400 });
+    }
+    const file = path.join(DATA_DIR, 'resume-question-order.json');
+    return await withStoryWrite(file, async () => {
+      const { bank } = await loadStories(DATA_DIR);
+      const cluster = bank.stories.find(s => s.id === body.storyId)?.clusters.find(c => c.id === body.clusterId);
+      if (!cluster) return NextResponse.json({ error: '找不到当前主题' }, { status: 404 });
+      const current = cluster.questions.map(q => q.id);
+      const wanted = body.questionIds as string[];
+      if (current.length !== wanted.length || wanted.some(id => !current.includes(id))) {
+        return NextResponse.json({ error: '题单已发生变化，请取消后重新排序' }, { status: 409 });
+      }
+      // A retry after a lost response is successful; stale tabs cannot undo another saved order.
+      if (JSON.stringify(current) === JSON.stringify(wanted)) return NextResponse.json({ questionIds: current });
+      if (JSON.stringify(current) !== JSON.stringify(body.expectedOrder)) {
+        return NextResponse.json({ error: '顺序已在其他页面更新，请取消后重新排序' }, { status: 409 });
+      }
+      type Order = { storyId: string; clusterId: string; questionIds: string[]; updatedAt: string };
+      const orders: Order[] = await fs.readFile(file, 'utf-8').then(JSON.parse).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== 'ENOENT') throw error;
+        return [];
+      });
+      if (!Array.isArray(orders)) throw new Error('Invalid question order file');
+      const next = [...orders.filter(o => o.storyId !== body.storyId || o.clusterId !== body.clusterId), { storyId: body.storyId, clusterId: body.clusterId, questionIds: wanted, updatedAt: new Date().toISOString() }];
+      const temporary = `${file}.${randomUUID()}.tmp`;
+      try {
+        await fs.mkdir(DATA_DIR, { recursive: true });
+        await fs.writeFile(temporary, JSON.stringify(next, null, 2) + '\n', 'utf-8');
+        await fs.rename(temporary, file);
+      } finally { await fs.unlink(temporary).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; }); }
+      return NextResponse.json({ questionIds: wanted });
+    });
+  } catch (error) {
+    console.error('Error saving question order:', error);
+    return NextResponse.json({ error: '顺序保存失败，请重试' }, { status: 500 });
+  }
+}
