@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { followUpPending, followUpStatus, type FollowUp } from '@shared/interview/stories';
 import { RecordingPanel } from './RecordingPanel';
+import { AnswerTimestamps } from './AnswerTimestamps';
 import { AttemptHistory } from './AttemptHistory';
 import { CopyInterviewContext } from './CopyInterviewContext';
 import { interviewContext, type InterviewContext } from '@/lib/interviewContext';
@@ -173,6 +174,7 @@ export function FollowUpItem({ f, recordingKey, initiallyOpen, onSave, registerD
       <span className="flex-1 min-w-0 break-words">{f.q}</span><span className={`shrink-0 text-[10px] ${followUpPending(f) ? 'text-amber-700' : 'text-stone-400'}`}>{f.deleted ? '已移除' : LABELS[followUpStatus(f)]}</span><span className="text-stone-400">{open ? '▾' : '▸'}</span>
     </button>
     {open && <div className="px-2.5 pb-2.5 space-y-2">
+      <AnswerTimestamps createdAt={f.createdAt ?? f.date} updatedAt={f.updatedAt ?? f.answerDate ?? f.date} />
       {f.quote && <blockquote className="border-l-2 border-stone-200 pl-2 text-[11px] text-stone-500 whitespace-pre-wrap">来源原话：{f.quote}</blockquote>}
       {f.why && <p className="text-[11px] text-stone-400">为什么问：{f.why}</p>}
       {editing && <form className="space-y-2" onSubmit={e => { e.preventDefault(); void commit({ followUpQuestion: question, followUpQuote: quote }).then(() => { draftWrite(editDraftKey, null); setEditing(false); }).catch(() => {}); }}>

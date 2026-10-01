@@ -134,6 +134,7 @@ export async function PUT(req: Request) {
         doc.answers[questionId] ??
         { questionId, status: 'todo' };
       const next: StoryAnswer = { ...prev };
+      const now = new Date().toISOString();
 
       if (typeof body.answer === 'string') {
         const text = body.answer.trim();
@@ -168,7 +169,7 @@ export async function PUT(req: Request) {
         next.answer = text || undefined;
         if (next.answer && prev.status === 'todo') next.status = 'draft';
         if (!next.answer) next.status = 'todo';
-        next.date = today;
+        if (text !== (prev.answer ?? '')) next.date = today;
       }
       if (body.status && STATUSES.includes(body.status as AnswerStatus)) {
         next.status = body.status as AnswerStatus;
@@ -224,9 +225,21 @@ export async function PUT(req: Request) {
         }
         if (action === 'delete') f.deleted = true;
         else if (action === 'restore') f.deleted = undefined;
+        if (i < 0 || JSON.stringify(f) !== JSON.stringify(list[i])) {
+          f.createdAt ??= i < 0 ? now : f.date ?? 'unknown';
+          f.updatedAt = now;
+        }
         next.followUps = i < 0 ? [...list, f] : [...list.slice(0, i), f, ...list.slice(i + 1)];
       }
 
+      // Follow-up edits have their own clock; don't change the main answer's.
+      const { followUps: _oldFollowUps, ...oldMain } = prev;
+      const { followUps: _newFollowUps, ...newMain } = next;
+      if (JSON.stringify(oldMain) !== JSON.stringify(newMain)) {
+        next.createdAt ??= [prev.date, ...(prev.revisions ?? []).map(r => r.date)].filter(Boolean).sort()[0]
+          ?? (doc.answers[questionId] ? 'unknown' : now);
+        next.updatedAt = now;
+      }
       doc.answers[questionId] = next;
 
       await fs.mkdir(STORIES_DIR, { recursive: true });

@@ -116,3 +116,43 @@ test('delete and restore commit supplied dirty fields before changing visibility
   assert.equal(!!read().followUps[0].deleted,false);
   assert.equal(read().status,'todo');
 });
+
+test('answer timestamps survive ISO colons, preserve creation and ignore no-op/follow-up writes', async () => {
+  fs.writeFileSync(file, docs.serializeStoryDoc({id:'fixture',answers:{'ra-one-1':{questionId:'ra-one-1',status:'spoken',answer:'old',date:'2020-02-02',revisions:[{date:'2019-01-01',text:'first'}]}}}));
+  assert.equal((await put({answer:'revised'})).status,200);
+  const first=read();
+  assert.equal(first.createdAt,'2019-01-01');
+  assert.match(first.updatedAt,/^\d{4}-.*T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  assert.equal(first.status,'spoken');
+  await put({answer:'revised'});
+  assert.equal(read().updatedAt,first.updatedAt);
+  await put({followUpAction:'create',followUpId:'900',followUpQuestion:'detail?'});
+  assert.equal(read().updatedAt,first.updatedAt);
+  const f=read().followUps[0];
+  assert.equal(f.createdAt,f.updatedAt);
+  await put({followUpId:'900',followUpAnswer:'explanation',followUpStatus:'spoken'});
+  assert.equal(read().followUps[0].createdAt,f.createdAt);
+  const saved=read().followUps[0];
+  await put({followUpId:'900',followUpAnswer:'explanation'});
+  assert.equal(read().followUps[0].updatedAt,saved.updatedAt);
+  assert.equal(read().updatedAt,first.updatedAt);
+});
+
+test('new answers retain first timestamp through later updates and clearing', async () => {
+  await put({answer:'first'});
+  const first=read();
+  assert.equal(first.createdAt,first.updatedAt);
+  await put({answer:'second'});
+  assert.equal(read().createdAt,first.createdAt);
+  await put({answer:''});
+  assert.equal(read().createdAt,first.createdAt);
+  assert.equal(read().status,'todo');
+});
+
+test('legacy answers without dates never acquire a fabricated creation time', async () => {
+  fs.writeFileSync(file,docs.serializeStoryDoc({id:'fixture',answers:{'ra-one-1':{questionId:'ra-one-1',status:'spoken',answer:'legacy',followUps:[{id:'1',q:'why',answer:'old'}]}}}));
+  await put({answer:'updated'});
+  assert.equal(read().createdAt,'unknown');
+  await put({followUpId:'1',followUpAnswer:'updated follow-up'});
+  assert.equal(read().followUps[0].createdAt,'unknown');
+});

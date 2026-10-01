@@ -14,6 +14,7 @@ function harness(fetch, storage = new Map()) {
     if(name==='react')return {useState(initial){const i=slot++;if(!(i in states))states[i]=initial;return[states[i],v=>{states[i]=typeof v==='function'?v(states[i]):v;}];},useRef(initial){const i=refSlot++;return refs[i]??=({current:initial});},useEffect(fn,deps){const i=effectSlot++;if(!effects[i]||deps.some((v,j)=>v!==effects[i].deps[j]))pendingEffects.push(()=>{effects[i]?.cleanup?.();effects[i]={deps,cleanup:fn()};});},useCallback(fn,deps){const i=callbackSlot++;if(!callbacks[i]||deps.some((v,j)=>v!==callbacks[i].deps[j]))callbacks[i]={deps,fn};return callbacks[i].fn;},useId:()=> 'test-id'};
     if(name==='@shared/interview/stories')return {followUpPending:f=>!f.deleted&&f.status!=='spoken'&&f.status!=='skipped',followUpStatus:f=>f.status??'todo'};
     if(name==='./RecordingPanel')return {RecordingPanel:'recording-panel'};
+    if(name==='./AnswerTimestamps')return {AnswerTimestamps:'answer-timestamps'};
     if(name==='./AttemptHistory')return {AttemptHistory:'attempt-history'};
     if(name==='./CopyInterviewContext')return {CopyInterviewContext:'copy-context'};
     if(name==='@/lib/interviewContext')return require('./helpers/load-typescript.cjs')()(require('node:path').resolve('lib/interviewContext.ts'));

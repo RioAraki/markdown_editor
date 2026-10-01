@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { STATUS_LABEL, followUpPending, type StoryAnswer, type StoryBank, type StoryAnswers, type StoryQuestion } from '@shared/interview/stories';
 import NoteBody from '@shared/interview/ui/NoteBody';
 import { behavioralHistory } from '@/lib/interviewAnswerHistory';
@@ -8,6 +8,7 @@ import type { InterviewDayDoc } from '@/types/interview';
 import { RecordingPanel } from './RecordingPanel';
 import { CopyInterviewContext } from './CopyInterviewContext';
 import { interviewContext } from '@/lib/interviewContext';
+import { AnswerTimestamps } from './AnswerTimestamps';
 import { AttemptHistory } from './AttemptHistory';
 import { FollowUpChain } from './FollowUpChain';
 import type { Resume } from '@shared/interview/resume';
@@ -21,7 +22,7 @@ export function InterviewAnswerReview({ itemId, stories, days, resume }: {
   const story = stories?.bank.stories.find(s => s.clusters.some(c => c.id === itemId));
   const cluster = story?.clusters.find(c => c.id === itemId);
   if (story && cluster) return <div className="space-y-2" aria-label="简历问题与历史回答">
-    <p className="text-[11px] text-stone-400">逐题回看 · 文字答案、回答状态与全部本地录音</p>
+    <p className="text-[11px] text-stone-400">逐题回看与修改 · 主问题、追问、回答状态与全部本地录音</p>
     {cluster.questions.map(question => <ResumeAnswer key={question.id} storyId={story.id} storyTitle={story.title} clusterTitle={cluster.title} resume={resume} resumeAnchor={cluster.resumeAnchor ?? story.resumeAnchor} question={question} answer={stories?.answers[story.id]?.[question.id]} />)}
   </div>;
   if (!itemId.startsWith('bh-')) return null;
@@ -41,7 +42,26 @@ export function InterviewAnswerReview({ itemId, stories, days, resume }: {
 function ResumeAnswer({ storyId, storyTitle, clusterTitle, question, answer, resume, resumeAnchor }: { storyId: string; storyTitle: string; clusterTitle: string; question: StoryQuestion; answer?: StoryAnswer; resume?: Resume; resumeAnchor?: string }) {
   const [open, setOpen] = useState(false);
   const contextTextRef = useRef<((focus?: 'main') => string) | null>(null);
-  const getContext = () => ({ question: question.q, answer: answer?.answer, storyTitle, clusterTitle, resume, resumeAnchor, tests: question.tests, gaps: answer?.gaps, revisions: answer?.revisions });
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(answer?.answer ?? '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const draftKey = `interview-overview-answer:${storyId}:${question.id}`;
+  useEffect(() => {
+    try { const saved = localStorage.getItem(draftKey); if (saved !== null) { setDraft(saved); setEditing(true); setOpen(true); } } catch {}
+  }, [draftKey]);
+  const save = async () => {
+    setBusy(true); setError('');
+    try {
+      const res = await fetch('/api/interview/stories', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ storyId, questionId: question.id, answer: draft }) });
+      if (!res.ok) throw new Error('保存失败，草稿已保留，请重试。');
+      try { localStorage.removeItem(draftKey); } catch {}
+      setEditing(false);
+      window.dispatchEvent(new CustomEvent('interview:stories-updated'));
+    } catch (e) { setError(e instanceof Error ? e.message : '保存失败，请重试'); }
+    finally { setBusy(false); }
+  };
+  const getContext = () => ({ question: question.q, answer: editing ? draft : answer?.answer, storyTitle, clusterTitle, resume, resumeAnchor, tests: question.tests, gaps: answer?.gaps, revisions: answer?.revisions });
   const prefix = `resume:${storyId}:${question.id}`;
   return <div className="rounded border border-stone-200 bg-white overflow-hidden">
     <button type="button" aria-expanded={open} onClick={() => setOpen(value => !value)} className="w-full text-left p-2.5 text-xs leading-relaxed">
@@ -53,6 +73,12 @@ function ResumeAnswer({ storyId, storyTitle, clusterTitle, question, answer, res
       <div><p className="text-[10px] text-stone-400 mb-1">当前文字答案{answer?.date ? ` · ${answer.date}` : ''}</p>
         {answer?.answer ? <NoteBody body={answer.answer} /> : <p className="text-xs text-stone-400">尚未填写文字答案，可以查看下方录音。</p>}
       </div>
+      <AnswerTimestamps createdAt={answer?.createdAt ?? [answer?.date, ...(answer?.revisions ?? []).map(r => r.date)].filter(Boolean).sort()[0]} updatedAt={answer?.updatedAt ?? answer?.date} />
+      {editing ? <div className="space-y-2">
+        <textarea aria-label="修改主问题答案" rows={8} disabled={busy} value={draft} className="w-full rounded border border-stone-300 bg-white p-2 text-xs text-stone-800 leading-relaxed" onChange={e => { setDraft(e.target.value); try { localStorage.setItem(draftKey, e.target.value); } catch {} }} />
+        <div className="flex gap-2"><button type="button" disabled={busy} onClick={() => void save()} className="rounded bg-indigo-600 px-3 py-1 text-xs text-white">{busy ? '保存中…' : '保存答案'}</button><button type="button" disabled={busy} onClick={() => { setEditing(false); setError(''); try { localStorage.removeItem(draftKey); } catch {} }} className="text-xs text-stone-600">取消修改</button></div>
+      </div> : <button type="button" onClick={() => { setDraft(answer?.answer ?? ''); setEditing(true); }} className="rounded border border-indigo-300 px-2 py-1 text-xs text-indigo-600">{answer?.answer ? '修改答案' : '填写答案'}</button>}
+      {error && <p role="alert" className="text-xs text-rose-700">{error}</p>}
       <CopyInterviewContext getText={() => contextTextRef.current?.('main') ?? interviewContext(getContext(), answer?.followUps ?? [], 'main')} />
       <AttemptHistory entries={(answer?.revisions ?? []).map(r => ({ date: r.date, text: r.text, verdict: r.grade, gaps: r.gaps }))} label="以前的文字版本" />
       {answer?.gaps?.length ? <div className="text-xs text-amber-700">{answer.gaps.map((gap, i) => <p key={i}>{gap}</p>)}</div> : null}
