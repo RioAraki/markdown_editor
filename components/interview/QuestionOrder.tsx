@@ -44,7 +44,7 @@ export function QuestionOrder({ storyId, clusterId, questions }: { storyId: stri
   return <div className="space-y-2">
     {!open && <div className="flex items-center gap-2"><button type="button" disabled={questions.length < 2} className={button} onClick={() => { setDraft([...questions]); setBase(questions.map(q => q.id)); setError(''); setSaved(false); setOpen(true); }}>调整题目顺序</button>{saved && <span role="status" className="text-xs text-emerald-700">顺序已保存</span>}</div>}
     {open && <section aria-label="调整主题内题目顺序" className="rounded border border-indigo-200 bg-indigo-50/30 p-2 space-y-2">
-      <p className="text-xs text-stone-600">拖动题目左侧的 ⠿ 手柄调整顺序，紫色线表示放置位置。也可上下移动或指定位置，完成后点击保存顺序。</p>
+      <p className="text-xs text-stone-600">拖动题目左侧的 ⠿ 手柄调整顺序，紫色线表示放置位置。完成后点击保存顺序。</p>
       <ol ref={list} className="space-y-2">{draft.map((q, index) => <li key={q.id}
         data-question-id={q.id}
         className={`rounded border bg-white p-2 space-y-2 ${dragId === q.id ? 'opacity-40' : ''} ${dropAt?.id === q.id ? (dropAt.after ? 'border-b-indigo-600 border-b-4' : 'border-t-indigo-600 border-t-4') : 'border-stone-200'}`}>
@@ -83,7 +83,6 @@ export function QuestionOrder({ storyId, clusterId, questions }: { storyId: stri
             if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
           }} onPointerCancel={endDrag} onLostPointerCapture={endDrag} onKeyDown={e => { if (e.key === 'Escape') endDrag(); }}>⠿</button>
         <p className="text-xs text-stone-800"><span className="mr-2 font-mono text-indigo-700">{index + 1}.</span>{q.q}{q.custom && <span className="ml-1 text-indigo-600">（自定义）</span>}</p></div>
-        <div className="flex gap-2 items-center"><button type="button" className={button} aria-label={`上移第${index + 1}题`} disabled={busy || index === 0} onClick={() => move(index, index - 1)}>↑ 上移</button><button type="button" className={button} aria-label={`下移第${index + 1}题`} disabled={busy || index === draft.length - 1} onClick={() => move(index, index + 1)}>↓ 下移</button><label className="text-xs text-stone-600">移到 <select aria-label={`第${index + 1}题的目标位置`} className="rounded border border-stone-300 bg-white p-1" value={index} disabled={busy} onChange={e => move(index, Number(e.target.value))}>{draft.map((_, i) => <option key={i} value={i}>第 {i + 1} 题</option>)}</select></label></div>
       </li>)}</ol>
       <div className="flex gap-2"><button type="button" disabled={busy} className="rounded bg-indigo-600 px-3 py-1 text-xs text-white disabled:opacity-50" onClick={() => void save()}>{busy ? '保存中…' : '保存顺序'}</button><button type="button" disabled={busy} className={button} onClick={() => { setOpen(false); setError(''); window.dispatchEvent(new CustomEvent('interview:stories-updated')); }}>取消</button></div>
       {error && <p role="alert" className="text-xs text-rose-700">{error}。当前调整仍保留。</p>}
