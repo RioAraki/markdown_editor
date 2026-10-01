@@ -94,7 +94,15 @@ export function OverviewPane() {
     for (const doc of days) {
       logs[doc.dateStr] = parseDayLog(serializeInterviewDayDoc(doc));
     }
-    const plan: InterviewPlan = { ...bundle.plan, logs };
+    const clusters = new Map(bundle.stories?.bank.stories.flatMap(s => s.clusters.map(c => [c.id, c] as const)) ?? []);
+    const plan: InterviewPlan = { ...bundle.plan, logs, inventory: { ...bundle.plan.inventory,
+      domains: bundle.plan.inventory.domains.map(d => ({ ...d, modules: d.modules.map(m => ({ ...m,
+        items: m.items.map(item => {
+          const cluster = clusters.get(item.id);
+          return cluster?.questions.some(q => q.custom) ? { ...item, title: `${cluster.title}（${cluster.questions.length} 问·P0 ${cluster.questions.filter(q => q.p === 0).length}）` } : item;
+        }),
+      })) })),
+    } };
 
     const statuses = weekStatuses(plan, today);
     const currentWeek = weekOf(plan, today);

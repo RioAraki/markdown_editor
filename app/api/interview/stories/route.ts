@@ -259,3 +259,45 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: 'Failed to save answer' }, { status: 500 });
   }
 }
+
+
+/** Add an independent question to a resume category, never to another question. */
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+    if (!body || typeof body.storyId !== 'string' || typeof body.clusterId !== 'string' ||
+      typeof body.id !== 'string' || !/^cq-custom-\d{40}$/.test(body.id) ||
+      typeof body.question !== 'string' || !body.question.trim() || body.question.length > 2000) {
+      return NextResponse.json({ error: '请填写有效的问题和分类' }, { status: 400 });
+    }
+    const file = path.join(DATA_DIR, 'custom-resume-questions.json');
+    return await withStoryWrite(file, async () => {
+      const { bank } = await loadStories(DATA_DIR);
+      const story = bank.stories.find(s => s.id === body.storyId);
+      const cluster = story?.clusters.find(c => c.id === body.clusterId);
+      if (!cluster) return NextResponse.json({ error: '找不到所选分类，请刷新后重试' }, { status: 404 });
+      type Entry = { storyId: string; clusterId: string; question: import('@shared/interview/stories').StoryQuestion };
+      const entries: Entry[] = await fs.readFile(file, 'utf-8').then(JSON.parse).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== 'ENOENT') throw error;
+        return [];
+      });
+      if (!Array.isArray(entries)) throw new Error('Invalid custom questions');
+      const existing = entries.find(e => e.question.id === body.id);
+      if (existing) {
+        if (existing.storyId !== body.storyId || existing.clusterId !== body.clusterId) return NextResponse.json({ error: '问题编号已被占用' }, { status: 409 });
+        return NextResponse.json({ question: existing.question });
+      }
+      const question: Entry['question'] = { id: body.id, q: body.question.trim().replace(/\s+/g, ' '), tests: '实际面试 / 自定义问题', p: 1, lens: '机制', custom: true, createdAt: new Date().toISOString() };
+      const temporary = `${file}.${randomUUID()}.tmp`;
+      try {
+        await fs.mkdir(DATA_DIR, { recursive: true });
+        await fs.writeFile(temporary, JSON.stringify([...entries, { storyId: body.storyId, clusterId: body.clusterId, question }], null, 2) + '\n', 'utf-8');
+        await fs.rename(temporary, file);
+      } finally { await fs.unlink(temporary).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; }); }
+      return NextResponse.json({ question }, { status: 201 });
+    });
+  } catch (error) {
+    console.error('Error creating custom resume question:', error);
+    return NextResponse.json({ error: '保存问题失败，请重试；已有数据未覆盖' }, { status: 500 });
+  }
+}
