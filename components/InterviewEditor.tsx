@@ -23,6 +23,7 @@ import {
   taskName,
 } from '@/types/interview';
 import { TodayPicker } from './interview/TodayPicker';
+import { ReviewWorkspace } from './interview/ReviewWorkspace';
 import { UnitRecord } from './interview/UnitRecord';
 import { TaskNote } from './interview/TaskNote';
 import { RecordingPanel } from './interview/RecordingPanel';
@@ -409,6 +410,7 @@ export function InterviewEditor() {
               </div>
             )}
             {selectedDate === today && <TodayPicker />}
+            <ReviewWorkspace />
             {!isLoading && !shownDay && selectedDate !== today && (
               <div className="bg-white rounded-lg border border-stone-200 p-6 text-center">
                 <p className="text-sm text-stone-500">
