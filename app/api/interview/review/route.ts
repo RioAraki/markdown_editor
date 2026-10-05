@@ -6,8 +6,10 @@ import { readReviews, updateReviews, ReviewError } from '@/lib/interviewReview';
 export async function GET() {
   try {
     const dir = resolveServerPaths().interviewData;
-    const [{ bank, log }, store] = await Promise.all([loadQBank(dir), readReviews(dir)]);
-    return NextResponse.json({ questions: bank.questions, log, store });
+    const [{ bank, log, reviewCategories }, store] = await Promise.all([loadQBank(dir), readReviews(dir)]);
+    const questions = bank.questions.map(q => q.bank === 'depth'
+      ? { ...q, category: reviewCategories[q.category] ?? 'AI 深度专题' } : q);
+    return NextResponse.json({ questions, log, store });
   } catch (error) {
     console.error('Load review failed', error);
     return NextResponse.json({ error: '复习记录加载失败，请重试' }, { status: 500 });

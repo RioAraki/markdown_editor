@@ -23,5 +23,7 @@ export async function loadQBank(dataDir: string) {
       : `已答 ${answered}/${qs.length} 题`;
     return [[block.name, { total: qs.length, answered, redo, message }]];
   }));
-  return { ...result, blockProgress };
+  const reviewCategories = Object.fromEntries(plan.inventory.domains.flatMap(d => d.modules)
+    .flatMap(m => m.items.map(i => [i.id, m.label])));
+  return { ...result, blockProgress, reviewCategories };
 }
