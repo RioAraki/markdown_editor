@@ -4,7 +4,7 @@
 
 ## Agent instruction files
 
-`CLAUDE.md` is the source of truth. `AGENTS.md` is generated from it by `scripts/sync-agent-docs.mjs`, so edit `CLAUDE.md` and never `AGENTS.md`. A `PostToolUse` hook in `.claude/settings.json` regenerates `AGENTS.md` after an agent edits any file; after editing `CLAUDE.md` by hand, run `node scripts/sync-agent-docs.mjs` yourself. `node scripts/sync-agent-docs.mjs --check` verifies the two match, and `--install-git-hook` adds a pre-commit hook that also covers hand edits (not installed by default, since git hooks live outside version control).
+`CLAUDE.md` is the source of truth. `AGENTS.md` is generated from it by `scripts/sync-agent-docs.mjs`, so edit `CLAUDE.md` and never `AGENTS.md`. Two hooks keep them in sync: a `PostToolUse` hook in `.claude/settings.json` regenerates `AGENTS.md` after an agent edits any file, and a `pre-commit` hook regenerates and stages it on every commit, which also covers hand edits. Git hooks live outside version control, so run `node scripts/sync-agent-docs.mjs --install-git-hook` once per clone. `node scripts/sync-agent-docs.mjs --check` verifies the two match.
 
 ## Agent skills
 
