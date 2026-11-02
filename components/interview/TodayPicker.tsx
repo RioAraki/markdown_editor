@@ -33,6 +33,42 @@ import {
  * could never gain the rest in the morning. Everything already in the day is
  * left out of the list, so this can only add.
  */
+/** One toggleable block in the 「加到今天」 row. */
+function BlockPill({
+  block,
+  chosen,
+  setChosen,
+}: {
+  block: BlockLite;
+  chosen: string[];
+  setChosen: (f: (cur: string[]) => string[]) => void;
+}) {
+  const on = chosen.includes(block.id);
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        setChosen((cur) =>
+          cur.includes(block.id)
+            ? cur.filter((x) => x !== block.id)
+            : [...cur, block.id],
+        )
+      }
+      title={block.desc}
+      className={`text-[11.5px] px-2 py-1 rounded border transition-colors ${
+        on
+          ? 'bg-indigo-600 text-white border-indigo-600'
+          : 'bg-white text-stone-600 border-stone-300 hover:border-indigo-400'
+      }`}
+    >
+      {block.name}
+      <span className={on ? 'ml-1 text-indigo-200' : 'ml-1 text-stone-400'}>
+        {block.minutes}min
+      </span>
+    </button>
+  );
+}
+
 function TopUp({
   emptyTasks,
   missing,
@@ -57,6 +93,10 @@ function TopUp({
   onRetry?: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  // Counting the retired blocks in the collapsed label would report
+  // 「还有 13 个没排」 every single day — the exact noise retiring them removes.
+  const active = missing.filter((b) => !b.retired);
+  const retired = missing.filter((b) => b.retired);
   return (
     <section className="mb-3">
       {!open ? (
@@ -67,7 +107,9 @@ function TopUp({
         >
           <Plus className="w-3.5 h-3.5" />
           今天再加个时段
-          <span className="text-stone-400">还有 {missing.length} 个没排</span>
+          <span className="text-stone-400">
+            {active.length > 0 ? `还有 ${active.length} 个没排` : '从已归档的时段里挑'}
+          </span>
         </button>
       ) : (
         <div className="bg-white rounded-lg border border-stone-200 p-3">
@@ -83,35 +125,25 @@ function TopUp({
               收起
             </button>
           </div>
-          <div className="flex flex-wrap gap-1.5 mb-2.5">
-            {missing.map((b) => {
-              const on = chosen.includes(b.id);
-              return (
-                <button
-                  key={b.id}
-                  type="button"
-                  onClick={() =>
-                    setChosen((cur) =>
-                      cur.includes(b.id)
-                        ? cur.filter((x) => x !== b.id)
-                        : [...cur, b.id],
-                    )
-                  }
-                  title={b.desc}
-                  className={`text-[11.5px] px-2 py-1 rounded border transition-colors ${
-                    on
-                      ? 'bg-indigo-600 text-white border-indigo-600'
-                      : 'bg-white text-stone-600 border-stone-300 hover:border-indigo-400'
-                  }`}
-                >
-                  {b.name}
-                  <span className={on ? 'ml-1 text-indigo-200' : 'ml-1 text-stone-400'}>
-                    {b.minutes}min
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          {active.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-2.5">
+              {active.map((b) => (
+                <BlockPill key={b.id} block={b} chosen={chosen} setChosen={setChosen} />
+              ))}
+            </div>
+          )}
+          {retired.length > 0 && (
+            <details className="mb-2.5 rounded border border-stone-200 bg-stone-50/60">
+              <summary className="cursor-pointer px-2 py-1.5 text-[11px] text-stone-500 hover:text-stone-700">
+                其它时段（已不常用 · {retired.length} 项）
+              </summary>
+              <div className="flex flex-wrap gap-1.5 px-2 pt-0.5 pb-2">
+                {retired.map((b) => (
+                  <BlockPill key={b.id} block={b} chosen={chosen} setChosen={setChosen} />
+                ))}
+              </div>
+            </details>
+          )}
           {Object.entries(emptyTasks ?? {}).map(([name, message]) => <p key={name} className="text-xs text-emerald-700 mb-2">{name} · {message}</p>)}
           <div className="flex items-center gap-2">
             <button
@@ -166,6 +198,13 @@ export function TodayPicker() {
   );
   const missing = (menu?.blocks ?? []).filter((b) => !already.has(b.name));
   const missingIds = new Set(missing.map((b) => b.id));
+  // Retired blocks and presets are folded into a collapsed group rather than
+  // dropped: the definitions, the days that used them and their renderers are
+  // all untouched, so ticking one here still composes the day it always did.
+  const activeBlocks = (menu?.blocks ?? []).filter((b) => !b.retired);
+  const retiredBlocks = (menu?.blocks ?? []).filter((b) => b.retired);
+  const activePresets = (menu?.presets ?? []).filter((p) => !p.retired);
+  const retiredPresets = (menu?.presets ?? []).filter((p) => p.retired);
   const availableSelection = todayExists
     ? chosenBlocks.filter((id) => missingIds.has(id))
     : chosenBlocks;
@@ -433,8 +472,10 @@ export function TodayPicker() {
             {showMenu && (
               <div className="space-y-3 rounded-lg border border-stone-200 bg-stone-50/60 p-3">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[11px] text-stone-400 mr-0.5">快捷组合</span>
-                  {menu.presets.map((pr) => (
+                  {activePresets.length > 0 && (
+                    <span className="text-[11px] text-stone-400 mr-0.5">快捷组合</span>
+                  )}
+                  {activePresets.map((pr) => (
                     <button
                       key={pr.id}
                       type="button"
@@ -454,30 +495,48 @@ export function TodayPicker() {
                   </button>
                 </div>
 
-                {groupByTrack(menu.blocks).map(([track, blocks]) => (
-                  <div key={track}>
-                    <div className="text-[10px] uppercase tracking-wider text-stone-400 font-medium mb-1">
-                      {menu.trackTypes[track]?.emoji ?? '·'}{' '}
-                      {menu.trackTypes[track]?.label ?? track}
+                <BlockGroups
+                  blocks={activeBlocks}
+                  menu={menu}
+                  chosenBlocks={chosenBlocks}
+                  setChosenBlocks={setChosenBlocks}
+                />
+
+                {(retiredBlocks.length > 0 || retiredPresets.length > 0) && (
+                  <details className="rounded-lg border border-stone-200 bg-white/70">
+                    <summary className="cursor-pointer px-2.5 py-2 text-[11px] text-stone-500 hover:text-stone-700">
+                      其它时段（已不常用 · {retiredBlocks.length} 项）
+                    </summary>
+                    <div className="space-y-3 border-t border-stone-200 p-2.5">
+                      <p className="text-[10.5px] text-stone-400 leading-snug">
+                        这些时段仍然完整保留 —— 定义、历史记录和展示都没动，只是不再默认出现在上面。
+                        勾一下就能照旧排进今天。
+                      </p>
+                      {retiredPresets.length > 0 && (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[11px] text-stone-400 mr-0.5">旧的快捷组合</span>
+                          {retiredPresets.map((pr) => (
+                            <button
+                              key={pr.id}
+                              type="button"
+                              title={pr.note}
+                              onClick={() => setChosenBlocks(withRequired(menu, pr.blocks))}
+                              className="text-[11px] px-2 py-1 rounded border border-stone-300 bg-white hover:border-indigo-400 hover:text-indigo-700"
+                            >
+                              {pr.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <BlockGroups
+                        blocks={retiredBlocks}
+                        menu={menu}
+                        chosenBlocks={chosenBlocks}
+                        setChosenBlocks={setChosenBlocks}
+                      />
                     </div>
-                    <div className="grid lg:grid-cols-2 gap-1.5">
-                      {blocks.map((b) => (
-                        <BlockOption
-                          key={b.id}
-                          block={b}
-                          checked={chosenBlocks.includes(b.id)}
-                          onToggle={() =>
-                            setChosenBlocks((cur) =>
-                              cur.includes(b.id)
-                                ? cur.filter((x) => x !== b.id)
-                                : [...cur, b.id],
-                            )
-                          }
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ))}
+                  </details>
+                )}
               </div>
             )}
           </>
@@ -746,6 +805,48 @@ function presetLabel(menu: BlocksResponse | null, ids: string[]): string {
       p.blocks.length === ids.length && p.blocks.every((b) => ids.includes(b)),
   );
   return hit ? `自选 · ${hit.label}` : '自选';
+}
+
+/** The checkbox grid, grouped by track — used for both halves of the menu. */
+function BlockGroups({
+  blocks,
+  menu,
+  chosenBlocks,
+  setChosenBlocks,
+}: {
+  blocks: BlockLite[];
+  menu: BlocksResponse;
+  chosenBlocks: string[];
+  setChosenBlocks: (f: (cur: string[]) => string[]) => void;
+}) {
+  return (
+    <>
+      {groupByTrack(blocks).map(([track, group]) => (
+        <div key={track}>
+          <div className="text-[10px] uppercase tracking-wider text-stone-400 font-medium mb-1">
+            {menu.trackTypes[track]?.emoji ?? '·'}{' '}
+            {menu.trackTypes[track]?.label ?? track}
+          </div>
+          <div className="grid lg:grid-cols-2 gap-1.5">
+            {group.map((b) => (
+              <BlockOption
+                key={b.id}
+                block={b}
+                checked={chosenBlocks.includes(b.id)}
+                onToggle={() =>
+                  setChosenBlocks((cur) =>
+                    cur.includes(b.id)
+                      ? cur.filter((x) => x !== b.id)
+                      : [...cur, b.id],
+                  )
+                }
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </>
+  );
 }
 
 function groupByTrack(blocks: BlockLite[]): [string, BlockLite[]][] {

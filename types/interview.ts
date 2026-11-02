@@ -184,6 +184,15 @@ export interface BlockLite {
   pool?: string[];
   url?: string;
   required?: boolean;
+  /**
+   * Still part of the preparation, but no longer offered up front.
+   *
+   * The interview is past the stage these blocks were for, so the picker folds
+   * them into a collapsed group instead of listing fourteen choices every day.
+   * Nothing is removed: the block definition, every day that used it and every
+   * renderer that draws it stay exactly as they were.
+   */
+  retired?: boolean;
   /** One line saying what this block actually is. */
   desc?: string;
   /** Labels of the 总览 modules this block feeds — the cross-reference. */
@@ -197,7 +206,14 @@ export interface BlockLite {
 export interface BlocksResponse {
   today: string;
   trackTypes: Record<string, { emoji: string; label: string }>;
-  presets: { id: string; label: string; note?: string; blocks: string[] }[];
+  presets: {
+    id: string;
+    label: string;
+    note?: string;
+    blocks: string[];
+    /** Same meaning as on a block — folded away rather than deleted. */
+    retired?: boolean;
+  }[];
   blocks: BlockLite[];
 }
 

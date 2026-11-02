@@ -52,6 +52,8 @@ export function OverviewPane() {
   const [bundle, setBundle] = useState<Bundle | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
+  /** Mount the full plan only once asked for — it is the expensive half. */
+  const [showFullPlan, setShowFullPlan] = useState(false);
   const today = getTodayDate();
 
   const load = async () => {
@@ -206,94 +208,142 @@ export function OverviewPane() {
     );
   }
 
+  // 刷题 is the only line still running daily, so it gets the pane. The rest of
+  // the 12-week plan is still computed and still rendered by the very same
+  // component — one disclosure down, where it no longer competes for attention.
+  const leetcodeCoverage = model.coverage.filter(c => c.domain.track === 'leetcode');
+
   return (
     <div className="h-full overflow-y-auto bg-stone-50">
       <div className="sticky top-0 z-10 px-4 py-2 bg-white/95 backdrop-blur border-b border-stone-200 flex items-center justify-between gap-2">
-        <div className="text-xs text-stone-500">
-          整体计划
-          <span className="ml-2 text-stone-400">
-            与 diary 同一份数据与同一个组件
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] text-stone-500">
-            {model.debt.flagged > 0 && (
-              <>
-                待重做{' '}
-                <span className="font-mono font-semibold text-rose-600">
-                  {model.debt.flagged}
-                </span>{' '}
-                ·{' '}
-              </>
-            )}
-            待复习{' '}
-            <span
-              className={`font-mono font-semibold ${
-                model.debt.due > 0 ? 'text-amber-600' : 'text-stone-600'
-              }`}
-            >
-              {model.debt.due}
-            </span>{' '}
-            · 未做 {model.debt.newCount}
-          </span>
-          <span className="text-[11px] text-stone-500 border-l border-stone-200 pl-2">
-            简历 说得出{' '}
-            <span className="font-mono font-semibold text-stone-600">
-              {model.sdebt.spoken}
-            </span>
-            /{model.sdebt.total}
-            {model.sdebt.flagged > 0 && (
-              <>
-                {' '}
-                · 待改{' '}
-                <span className="font-mono font-semibold text-amber-600">
-                  {model.sdebt.flagged}
-                </span>
-              </>
-            )}
-          </span>
-          <span className="text-[11px] text-stone-500 border-l border-stone-200 pl-2">
-            题库 已答{' '}
-            <span className="font-mono font-semibold text-stone-600">
-              {model.qdebt.answered}
-            </span>
-            {model.qdebt.redoDue > 0 && (
-              <>
-                {' '}
-                · 待重做{' '}
-                <span className="font-mono font-semibold text-rose-600">
-                  {model.qdebt.redoDue}
-                </span>
-              </>
-            )}
-          </span>
-          <button
-            onClick={load}
-            title="重新读取磁盘上的计划"
-            className="p-1 rounded hover:bg-stone-100 text-stone-500"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${reloading ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
+        <div className="text-xs text-stone-500">刷题进度</div>
+        <button
+          onClick={load}
+          title="重新读取磁盘上的计划"
+          className="p-1 rounded hover:bg-stone-100 text-stone-500"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${reloading ? 'animate-spin' : ''}`} />
+        </button>
       </div>
-      <OverviewPanel
-        plan={model.plan}
-        today={today}
-        statuses={model.statuses}
-        currentWeek={model.currentWeek}
-        currentPhase={model.currentPhase}
-        todayPlan={model.todayPlan}
-        hasTodayLog={model.hasTodayLog}
-        progress={model.progress}
-        rhythm={model.rhythm}
-        tracks={model.tracks}
-        coverage={model.coverage}
-        overall={model.overall}
-        weekTracks={model.weekTracks}
-        notes={bundle?.notes}
-        renderItemDetail={item => (item.item.id.startsWith('bh-') || bundle?.stories?.bank.stories.some(story => story.clusters.some(cluster => cluster.id === item.item.id)))
-          ? <InterviewAnswerReview itemId={item.item.id} stories={bundle?.stories} resume={bundle?.resume} days={days} /> : null}
-      />
+
+      <div className="p-4 space-y-3">
+        <div className="grid grid-cols-3 gap-2">
+          <Figure label="待重做" value={model.debt.flagged} tone={model.debt.flagged > 0 ? 'text-rose-600' : 'text-stone-600'} hint="你亲手标的" />
+          <Figure label="待复习" value={model.debt.due} tone={model.debt.due > 0 ? 'text-amber-600' : 'text-stone-600'} hint="已到间隔" />
+          <Figure label="未做" value={model.debt.newCount} tone="text-stone-600" hint="题库里剩下的" />
+        </div>
+
+        {leetcodeCoverage.map(domain => (
+          <div key={domain.domain.id} className="rounded-lg border border-stone-200 bg-white p-3">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[13px] font-medium text-stone-800">
+                {domain.domain.emoji} {domain.domain.label}
+              </span>
+              <span className="font-mono text-[11px] text-stone-400">
+                {domain.started}/{domain.total} 专题
+              </span>
+            </div>
+            <div className="mt-2 space-y-1.5">
+              {domain.items.filter(item => item.metric && item.metric.total > 0).map(item => {
+                const m = item.metric!;
+                return (
+                  <div key={item.item.id}>
+                    <div className="flex items-baseline justify-between gap-2 text-[11px]">
+                      <span className="text-stone-600 truncate">{item.item.title}</span>
+                      <span className="font-mono text-stone-400 shrink-0">
+                        {m.done}/{m.total} {m.unit}
+                        {!!m.redo && <span className="ml-1 text-rose-600">待重做 {m.redo}</span>}
+                        {!m.redo && !!m.due && <span className="ml-1 text-amber-600">待复习 {m.due}</span>}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 h-1.5 rounded bg-stone-200 overflow-hidden flex">
+                      <div className="h-full bg-emerald-500" style={{ width: `${(m.done / m.total) * 100}%` }} />
+                      <div className="h-full bg-amber-300" style={{ width: `${(m.partial / m.total) * 100}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+
+        <details
+          className="rounded-lg border border-stone-200 bg-white"
+          onToggle={e => setShowFullPlan(e.currentTarget.open)}
+        >
+          <summary className="cursor-pointer px-3 py-2.5 text-[12px] text-stone-600 hover:text-indigo-700">
+            完整 12 周总览
+            <span className="ml-2 text-[11px] text-stone-400">
+              覆盖面 · 阶段 · 节奏 · 目标公司
+            </span>
+          </summary>
+          {showFullPlan && (
+            <div className="border-t border-stone-200">
+              <div className="px-3 py-2 flex items-center flex-wrap gap-x-3 gap-y-1 border-b border-stone-100">
+                <span className="text-[11px] text-stone-500">
+                  简历 说得出{' '}
+                  <span className="font-mono font-semibold text-stone-600">
+                    {model.sdebt.spoken}
+                  </span>
+                  /{model.sdebt.total}
+                  {model.sdebt.flagged > 0 && (
+                    <>
+                      {' '}
+                      · 待改{' '}
+                      <span className="font-mono font-semibold text-amber-600">
+                        {model.sdebt.flagged}
+                      </span>
+                    </>
+                  )}
+                </span>
+                <span className="text-[11px] text-stone-500 border-l border-stone-200 pl-3">
+                  题库 已答{' '}
+                  <span className="font-mono font-semibold text-stone-600">
+                    {model.qdebt.answered}
+                  </span>
+                  {model.qdebt.redoDue > 0 && (
+                    <>
+                      {' '}
+                      · 待重做{' '}
+                      <span className="font-mono font-semibold text-rose-600">
+                        {model.qdebt.redoDue}
+                      </span>
+                    </>
+                  )}
+                </span>
+              </div>
+              <OverviewPanel
+                plan={model.plan}
+                today={today}
+                statuses={model.statuses}
+                currentWeek={model.currentWeek}
+                currentPhase={model.currentPhase}
+                todayPlan={model.todayPlan}
+                hasTodayLog={model.hasTodayLog}
+                progress={model.progress}
+                rhythm={model.rhythm}
+                tracks={model.tracks}
+                coverage={model.coverage}
+                overall={model.overall}
+                weekTracks={model.weekTracks}
+                notes={bundle?.notes}
+                renderItemDetail={item => (item.item.id.startsWith('bh-') || bundle?.stories?.bank.stories.some(story => story.clusters.some(cluster => cluster.id === item.item.id)))
+                  ? <InterviewAnswerReview itemId={item.item.id} stories={bundle?.stories} resume={bundle?.resume} days={days} /> : null}
+              />
+            </div>
+          )}
+        </details>
+      </div>
+    </div>
+  );
+}
+
+function Figure({ label, value, tone, hint }: { label: string; value: number; tone: string; hint: string }) {
+  return (
+    <div className="rounded-lg border border-stone-200 bg-white px-2.5 py-2">
+      <div className="text-[11px] text-stone-500">{label}</div>
+      <div className={`font-mono text-xl font-semibold leading-tight ${tone}`}>{value}</div>
+      <div className="text-[10px] text-stone-400 leading-snug">{hint}</div>
     </div>
   );
 }

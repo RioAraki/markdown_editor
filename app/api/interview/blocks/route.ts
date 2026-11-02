@@ -7,6 +7,19 @@ import { blockStatuses } from '@shared/interview/core';
 const DATA_DIR = resolveServerPaths().interviewData;
 
 /**
+ * The blocks and presets still offered up front.
+ *
+ * The interview has reached the stage where only 刷题 is still worth doing
+ * daily, so everything else is marked `retired` and the picker folds it into a
+ * collapsed group. This lives here rather than in `plan.json` on purpose: the
+ * plan file is a record, and which blocks are currently interesting is a UI
+ * judgement that should be reversible by editing one line. Add an id back to
+ * either set and it returns to the front of the menu.
+ */
+const ACTIVE_BLOCKS = new Set(['leetcode']);
+const ACTIVE_PRESETS = new Set<string>([]);
+
+/**
  * The menu you assemble a day from: every block, plus how long it has been
  * since you actually did one.
  *
@@ -27,9 +40,13 @@ export async function GET() {
     return NextResponse.json({
       today,
       trackTypes: plan.trackTypes ?? {},
-      presets: plan.presets ?? [],
+      presets: (plan.presets ?? []).map((p) => ({
+        ...p,
+        retired: !ACTIVE_PRESETS.has(p.id),
+      })),
       blocks: blockStatuses(plan, today).map((s) => ({
         ...s.block,
+        retired: !ACTIVE_BLOCKS.has(s.block.id),
         covers: (s.block.pool ?? [])
           .map((id) => moduleLabel[id])
           .filter((x): x is string => !!x),

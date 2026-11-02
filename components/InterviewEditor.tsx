@@ -23,7 +23,7 @@ import {
   taskName,
 } from '@/types/interview';
 import { TodayPicker } from './interview/TodayPicker';
-import { ReviewWorkspace } from './interview/ReviewWorkspace';
+import { ArchivedMaterials } from './interview/ArchivedMaterials';
 import { UnitRecord } from './interview/UnitRecord';
 import { TaskNote } from './interview/TaskNote';
 import { RecordingPanel } from './interview/RecordingPanel';
@@ -410,7 +410,6 @@ export function InterviewEditor() {
               </div>
             )}
             {selectedDate === today && <TodayPicker />}
-            <ReviewWorkspace />
             {!isLoading && !shownDay && selectedDate !== today && (
               <div className="bg-white rounded-lg border border-stone-200 p-6 text-center">
                 <p className="text-sm text-stone-500">
@@ -450,6 +449,13 @@ export function InterviewEditor() {
                 onSwapItem={swapItem}
               />
             )}
+            {/* Below the day, not inside it: these are read back on their own
+                schedule, not as part of what today is for. */}
+            <ArchivedMaterials
+              days={days}
+              paperIds={paperIds}
+              onOpenPaper={setOpenPaper}
+            />
             <div className="h-[40vh]" />
           </div>
         </div>
