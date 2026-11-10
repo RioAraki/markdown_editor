@@ -17,7 +17,7 @@ export function processIdentity(pid) {
   if (!Number.isSafeInteger(pid) || pid < 1) throw new Error('Invalid pid');
   if (process.platform === 'win32') {
     const script = `$p=Get-CimInstance Win32_Process -Filter 'ProcessId=${pid}'; if($p){ @{created=$p.CreationDate.ToUniversalTime().Ticks.ToString();command=$p.CommandLine} | ConvertTo-Json -Compress }`;
-    const text = execFileSync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8', windowsHide: true, timeout: 10000 }).trim();
+    const text = execFileSync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8', windowsHide: true, timeout: 60000 }).trim();
     return text ? JSON.parse(text) : null;
   }
   try {
@@ -104,9 +104,9 @@ class Logs {
 
 export async function runSupervisor(root = runtimeRoot(), overrides = {}) {
   root = path.resolve(root);
-  const options = { port: 3002, hostname: '0.0.0.0', intervalMs: 30000, timeoutMs: 5000,
+  const options = { port: 3002, hostname: '0.0.0.0', intervalMs: 30000, timeoutMs: 30000,
     graceMs: 120000, stopMs: 30000, backoffMs: [5000, 15000, 30000, 60000],
-    failureRetryMs: 300000, stableMs: 300000, ...overrides };
+    failureRetryMs: 60000, stableMs: 300000, ...overrides };
   await mkdir(root, { recursive: true });
   const guard = net.createServer(socket => socket.destroy());
   const address = singletonAddress(root, 'supervisor');
@@ -300,7 +300,7 @@ export async function runSupervisor(root = runtimeRoot(), overrides = {}) {
         } catch (error) {
           healthySince = 0; failures++; state.consecutiveFailures = failures;
           await fault(error);
-          if (child?.exited || failures >= 3) await scheduleFailure(error);
+          if (child?.exited || failures >= 5) await scheduleFailure(error);
         }
       }
     } catch (error) { await scheduleFailure(error); }
