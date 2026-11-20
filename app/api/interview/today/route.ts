@@ -13,10 +13,11 @@ import {
 } from '@/lib/interviewInventory';
 import {
   loadInterviewPlan,
-  loadLeetCode,
   loadPapers,
   loadStories,
 } from '@shared/interview/load';
+import { loadLeetCodeModel } from '@/lib/leetcodeModel';
+import { recommendAdaptive } from '@shared/interview/adaptive';
 import { parseProblemUnit } from '@shared/interview/leetcode';
 import { QBANK_REDO_DAYS, parseQuestionUnit } from '@shared/interview/qbank';
 import { recommendQuestions } from '@shared/interview/qbank';
@@ -29,8 +30,6 @@ import {
 import {
   allProblemStates,
   dayProblemIds,
-  currentTopic,
-  recommendProblems,
 } from '@shared/interview/leetcode';
 import { TodayPlanResponse } from '@/types/interview';
 import { listRecordings } from '@/lib/interviewRecordings';
@@ -46,7 +45,7 @@ export async function GET(req: Request) {
       loadInventory(),
       loadMastery(),
       computeTouchCounts(),
-      loadLeetCode(DATA_DIR),
+      loadLeetCodeModel(DATA_DIR, format(new Date(), 'yyyy-MM-dd')),
       loadQBank(DATA_DIR),
       loadInterviewPlan(DATA_DIR),
       loadPapers(DATA_DIR),
@@ -206,26 +205,6 @@ export async function GET(req: Request) {
         }
       }
 
-      // 刷题 follows the course, not the least-touched heuristic. It also
-      // overrides any carry-over, so the slot is not 'resumed from' the day
-      // that happened to schedule the same topic.
-      let byCourse = false;
-      if (task.track === 'leetcode') {
-        const t = currentTopic(
-          leetcode.bank,
-          leetcode.log,
-          today,
-          inventory.domains
-            .filter((d) => d.id === 'leetcode')
-            .flatMap((d) => d.modules)
-            .flatMap((m) => m.items.map((it) => it.id)),
-        );
-        if (t) {
-          resumeId = t.itemId;
-          byCourse = true;
-        }
-      }
-
       const pick =
         (resumeId && choices.find((c) => c.id === resumeId)) ||
         suggestForTrack(choices, inventory, task.track, used, task.pool);
@@ -233,7 +212,7 @@ export async function GET(req: Request) {
         used.add(pick.id);
         suggestedItems[task.name] = {
           resumedFrom:
-            !byCourse && resumeId === pick.id
+            resumeId === pick.id
               ? pending.get(task.name)?.date
               : undefined,
           id: pick.id,
@@ -251,26 +230,13 @@ export async function GET(req: Request) {
     // problems, mixing overdue reviews with new ones from that topic.
     const usedProblems = new Set(dayProblemIds(fullPlan.logs[today]));
     const suggestedProblems: TodayPlanResponse['suggestedProblems'] = {};
-    // The course order, straight off the inventory — 阶段一 first, and each
-    // stage's points in the order they were laid out.
-    const courseOrder = inventory.domains
-      .filter((d) => d.id === 'leetcode')
-      .flatMap((d) => d.modules)
-      .flatMap((m) => m.items.map((it) => it.id));
-    const topic = currentTopic(leetcode.bank, leetcode.log, today, courseOrder);
-    // Everything from the current topic onward, so a topic whose core is all
-    // attempted-this-week spills into the next rather than yielding nothing.
-    const remaining = topic
-      ? courseOrder.slice(courseOrder.indexOf(topic.itemId))
-      : undefined;
-
     for (const task of suggestion?.tasks ?? []) {
       if (task.track !== 'leetcode') continue;
-      const recs = recommendProblems({
+      const recs = recommendAdaptive({
         bank: leetcode.bank,
         log: leetcode.log,
-        itemId: topic?.itemId ?? null,
-        courseOrder: remaining,
+        ability: leetcode.ability,
+        solved: leetcode.solved,
         count: Math.max(1, task.units),
         includeAllPriority: true,
         today,

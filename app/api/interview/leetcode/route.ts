@@ -11,8 +11,6 @@ import {
   LeetCodeLog,
   OUTCOME_ORDER,
   Outcome,
-  allProblemStates,
-  reviewDebt,
 } from '@shared/interview/leetcode';
 
 const DATA_DIR = resolveServerPaths().interviewData;
@@ -36,12 +34,22 @@ export async function GET() {
       }
     }
 
+    // The catalog's twelve 题单 topics, keyed by their own ids (`dp`, `ds`, …).
+    for (const t of bank.topics ?? []) topics[t.id] = t.name;
+
+    // Four thousand problems: send only what the editor reads off them.
     return NextResponse.json({
-      bank,
+      bank: {
+        problems: bank.problems.map((p) => ({
+          id: p.id,
+          url: p.url,
+          item: p.item,
+          ...(p.topics ? { topics: p.topics } : {}),
+          ...(p.rating !== undefined ? { rating: p.rating } : {}),
+        })),
+      },
       log,
       topics,
-      states: allProblemStates(bank, log, today),
-      debt: reviewDebt(bank, log, today),
       today,
     });
   } catch (error) {
@@ -110,13 +118,8 @@ export async function PUT(req: Request) {
       'utf-8',
     );
 
-    const { bank } = await loadLeetCode(DATA_DIR);
-    const today = format(new Date(), 'yyyy-MM-dd');
-    return NextResponse.json({
-      log: store,
-      states: allProblemStates(bank, store, today),
-      debt: reviewDebt(bank, store, today),
-    });
+    // Callers only check that the write landed; the overview re-reads.
+    return NextResponse.json({ ok: true });
   } catch (error) {
     console.error('Error in PUT /api/interview/leetcode:', error);
     return NextResponse.json(

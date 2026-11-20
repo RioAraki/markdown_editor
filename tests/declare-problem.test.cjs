@@ -35,9 +35,9 @@ test('an outside-bank problem is identified, retained across loads and records n
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root,'leetcode.json'),'utf8')),seed);
   const result = await load(path.resolve('app/api/interview/leetcode/route.ts')).PUT(new Request('http://localhost/api/interview/leetcode',{method:'PUT',body:JSON.stringify({problemId:9876,date:'2026-09-13',outcome:'struggled',note:'自己的批注',redo:true})}));
   assert.equal(result.status,200);
-  const data=await result.json();
-  assert.equal(data.log['9876'].attempts[0].note,'自己的批注');
-  assert.equal(data.log['9876'].attempts[0].redo,true);
+  const saved=JSON.parse(fs.readFileSync(path.join(root,'leetcode-log.json'),'utf8'));
+  assert.equal(saved['9876'].attempts[0].note,'自己的批注');
+  assert.equal(saved['9876'].attempts[0].redo,true);
   const retry=await post(request('https://leetcode.cn/problems/extra-test/solutions/'));
   assert.equal(retry.status,200);
   assert.equal(calls.length,1);

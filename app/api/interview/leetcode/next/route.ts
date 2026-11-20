@@ -1,18 +1,15 @@
 import { resolveServerPaths } from '@/lib/serverPaths';
 import { NextResponse } from 'next/server';
 import { format, isValid, parseISO } from 'date-fns';
-import { loadInterviewPlan, loadLeetCode } from '@shared/interview/load';
-import {
-  currentTopic,
-  dayProblemIds,
-  problemUnitText,
-  recommendProblems,
-} from '@shared/interview/leetcode';
+import { loadInterviewPlan } from '@shared/interview/load';
+import { dayProblemIds, problemUnitText } from '@shared/interview/leetcode';
+import { recommendAdaptive } from '@shared/interview/adaptive';
+import { loadLeetCodeModel } from '@/lib/leetcodeModel';
 
 const DATA_DIR = resolveServerPaths().interviewData;
 
-/** Continue the same two-new/one-review sequence as daily generation.
- * The saved day plus the client's unsaved IDs determine the whole-day ratio.
+/** One more problem by the same ability-driven rule as daily generation.
+ * The saved day plus the client's unsaved IDs count as already planned.
  */
 export async function POST(req: Request) {
   try {
@@ -27,8 +24,8 @@ export async function POST(req: Request) {
         (body.count !== undefined && (!Number.isInteger(body.count) || body.count < 1))) {
       return NextResponse.json({ error: 'Invalid problem IDs or count' }, { status: 400 });
     }
-    const [{ bank, log }, plan] = await Promise.all([
-      loadLeetCode(DATA_DIR),
+    const [model, plan] = await Promise.all([
+      loadLeetCodeModel(DATA_DIR, date),
       loadInterviewPlan(DATA_DIR),
     ]);
     // Keep the client's displayed order, including unsaved changes; include
@@ -38,31 +35,25 @@ export async function POST(req: Request) {
       ...dayProblemIds(plan.logs[date]),
     ]);
     const count = Math.min(body.count ?? 1, 5);
-    const courseOrder = plan.inventory.domains
-      .filter((d) => d.id === 'leetcode')
-      .flatMap((d) => d.modules)
-      .flatMap((m) => m.items.map((it) => it.id));
-    const topic = currentTopic(bank, log, date, courseOrder);
-    const recs = recommendProblems({
-      bank,
-      log,
-      itemId: topic?.itemId ?? null,
-      courseOrder: topic
-        ? courseOrder.slice(courseOrder.indexOf(topic.itemId))
-        : undefined,
+    const recs = recommendAdaptive({
+      bank: model.bank,
+      log: model.log,
+      ability: model.ability,
+      solved: model.solved,
       count,
       today: date,
       exclude,
     });
     return NextResponse.json({
-      mode: topic ? 'course' : 'random',
-      topic: topic?.itemId,
+      mode: 'adaptive',
       problems: recs.map((r) => ({
         id: r.problem.id,
         title: r.problem.title,
         url: r.problem.url,
         difficulty: r.problem.difficulty,
         item: r.problem.item,
+        topic: r.topic,
+        rating: r.problem.rating,
         kind: r.kind,
         flagged: r.flagged,
         reason: r.reason,

@@ -253,7 +253,7 @@ export function InterviewEditor() {
       fetch('/api/interview/leetcode')
         .then((r) => (r.ok ? r.json() : Promise.reject()))
         .then((d: {
-          bank: { problems: { id: number; item: string | null; url: string }[] };
+          bank: { problems: { id: number; item: string | null; url: string; topics?: string[] }[] };
           topics: Record<string, string>;
           log: Record<string, { attempts: { date: string; outcome: string; note?: string }[] }>;
         }) => {
@@ -262,7 +262,12 @@ export function InterviewEditor() {
           const m: Record<number, string> = {};
           const items: Record<number, string> = {};
           for (const p of d.bank.problems) {
-            if (!p.item) continue;
+            if (!p.item) {
+              // Catalog problems name their 题单 topics instead of a course item.
+              const names = (p.topics ?? []).map((t) => d.topics[t]).filter(Boolean);
+              if (names.length > 0) m[p.id] = names.join(' / ');
+              continue;
+            }
             items[p.id] = p.item;
             if (d.topics[p.item]) m[p.id] = d.topics[p.item];
           }

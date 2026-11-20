@@ -15,6 +15,16 @@ const bank = { problems: [...Array.from({ length: 20 }, (_, i) => i + 1), ...Arr
   id, item: 'a', seq: id, tier: 'core', title: `题${id}`, difficulty: 'medium', url: `https://leetcode.cn/problems/${id}/`,
 })) };
 write('leetcode.json', bank);
+// The catalog gives the same problems ratings and two topics, so the
+// ability-driven recommender has something to choose from.
+write('lc-catalog.json', {
+  topics: [{ id: 't1', name: '专题一', sections: ['甲', '乙'] }, { id: 't2', name: '专题二', sections: ['丙'] }],
+  problems: Array.from({ length: 20 }, (_, i) => ({
+    id: i + 1, slug: `p${i + 1}`, title: `题${i + 1}`, difficulty: 'medium',
+    rating: 1400 + i * 30, ratingSource: 'contest',
+    topics: [i < 10 ? 't1' : 't2'], sections: [i < 10 ? `t1:${i % 2}` : 't2:0'], listOrder: i,
+  })),
+});
 write('inventory.json', { domains: [{ id: 'leetcode', track: 'leetcode', label: '算法', modules: [{ id: 'course', label: '课程', items: [{ id: 'a', title: '专题 A' }] }] }] });
 write('plan.json', { blocks: [
   { id: 'leetcode', name: '刷题', track: 'leetcode', units: 6, target: '6 题', pool: ['course'] },
@@ -68,7 +78,7 @@ test('tomorrow review persists through API and wins both daily generation and ad
   assert.notEqual((await requestNext({date:today,count:1}))[0].id,101);
 });
 
-test('daily carry-over stays inside the six-slot ratio and cannot revive unflagged outcomes', async () => {
+test('daily keeps unfinished carry-over, takes one flagged redo, and never revives unflagged outcomes', async () => {
   reset();
   const log = JSON.parse(fs.readFileSync(path.join(dir, 'leetcode-log.json')));
   log[101].attempts[0].redo = false;
@@ -78,16 +88,18 @@ test('daily carry-over stays inside the six-slot ratio and cannot revive unflagg
   assert.equal(response.status, 200);
   const rows = (await response.json()).suggestedProblems['刷题'];
   assert.equal(rows.length, 6);
-  assert.deepEqual(rows.map(r => r.kind), ['new', 'new', 'review', 'new', 'new', 'review']);
+  assert.equal(rows.filter(r => r.kind === 'review').length, 1);
   assert.ok(!rows.some(r => r.id === 101));
-  assert.equal(rows[0].id, 8);
+  assert.ok(rows.some(r => r.id === 8 && r.reason.startsWith('接着做')));
+  assert.ok(rows.filter(r => r.kind === 'new' && r.id !== 8).every(r => r.reason.includes('预计成功率')));
 });
 
-test('daily six and three successive additions share one sequence even after saving outcomes', async () => {
+test('additions after the daily card bring new problems once the day has its redo', async () => {
   reset();
   const response = await daily.GET(new Request('http://localhost/api/interview/today?blocks=leetcode'));
   const rows = (await response.json()).suggestedProblems['刷题'];
   const ids = rows.map(r => r.id);
+  assert.equal(rows.filter(r => r.kind === 'review').length, 1);
   const log = JSON.parse(fs.readFileSync(path.join(dir, 'leetcode-log.json')));
   for (const id of ids) (log[id] ??= { attempts: [] }).attempts.push({ date: today, outcome: 'clean' });
   write('leetcode-log.json', log);
@@ -98,7 +110,7 @@ test('daily six and three successive additions share one sequence even after sav
     assert.ok(!ids.includes(p.id));
     ids.push(p.id); kinds.push(p.kind);
   }
-  assert.deepEqual(kinds, ['new', 'new', 'review']);
+  assert.deepEqual(kinds, ['new', 'new', 'new']);
 });
 
 test('extra endpoint includes other persisted blocks and unsaved IDs in the day total', async () => {

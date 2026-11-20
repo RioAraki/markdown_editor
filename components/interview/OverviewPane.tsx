@@ -28,6 +28,7 @@ import { serializeInterviewDayDoc } from '@/lib/interviewParser';
 import { getTodayDate } from '@/lib/dateUtils';
 import { DEPTH_MODULES } from '@/lib/depthQuestions';
 import { InterviewAnswerReview } from './InterviewAnswerReview';
+import { AbilityPanel } from './AbilityPanel';
 import type { Resume } from '@shared/interview/resume';
 
 interface Bundle {
@@ -208,10 +209,9 @@ export function OverviewPane() {
     );
   }
 
-  // 刷题 is the only line still running daily, so it gets the pane. The rest of
-  // the 12-week plan is still computed and still rendered by the very same
-  // component — one disclosure down, where it no longer competes for attention.
-  const leetcodeCoverage = model.coverage.filter(c => c.domain.track === 'leetcode');
+  // 刷题 is the only line still running daily, so it gets the pane: ability
+  // per topic replaces the old per-course progress bars. The rest of the
+  // 12-week plan is one disclosure down, where it no longer competes.
 
   return (
     <div className="h-full overflow-y-auto bg-stone-50">
@@ -227,45 +227,12 @@ export function OverviewPane() {
       </div>
 
       <div className="p-4 space-y-3">
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           <Figure label="待重做" value={model.debt.flagged} tone={model.debt.flagged > 0 ? 'text-rose-600' : 'text-stone-600'} hint="你亲手标的" />
           <Figure label="待复习" value={model.debt.due} tone={model.debt.due > 0 ? 'text-amber-600' : 'text-stone-600'} hint="已到间隔" />
-          <Figure label="未做" value={model.debt.newCount} tone="text-stone-600" hint="题库里剩下的" />
         </div>
 
-        {leetcodeCoverage.map(domain => (
-          <div key={domain.domain.id} className="rounded-lg border border-stone-200 bg-white p-3">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-[13px] font-medium text-stone-800">
-                {domain.domain.emoji} {domain.domain.label}
-              </span>
-              <span className="font-mono text-[11px] text-stone-400">
-                {domain.started}/{domain.total} 专题
-              </span>
-            </div>
-            <div className="mt-2 space-y-1.5">
-              {domain.items.filter(item => item.metric && item.metric.total > 0).map(item => {
-                const m = item.metric!;
-                return (
-                  <div key={item.item.id}>
-                    <div className="flex items-baseline justify-between gap-2 text-[11px]">
-                      <span className="text-stone-600 truncate">{item.item.title}</span>
-                      <span className="font-mono text-stone-400 shrink-0">
-                        {m.done}/{m.total} {m.unit}
-                        {!!m.redo && <span className="ml-1 text-rose-600">待重做 {m.redo}</span>}
-                        {!m.redo && !!m.due && <span className="ml-1 text-amber-600">待复习 {m.due}</span>}
-                      </span>
-                    </div>
-                    <div className="mt-0.5 h-1.5 rounded bg-stone-200 overflow-hidden flex">
-                      <div className="h-full bg-emerald-500" style={{ width: `${(m.done / m.total) * 100}%` }} />
-                      <div className="h-full bg-amber-300" style={{ width: `${(m.partial / m.total) * 100}%` }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+        <AbilityPanel />
 
         <details
           className="rounded-lg border border-stone-200 bg-white"

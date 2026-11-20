@@ -56,6 +56,7 @@ const OUTCOME_TONE: Record<Outcome, string> = {
   suboptimal: 'bg-lime-100 text-lime-800 border-lime-300 hover:bg-lime-200',
   clean:
     'bg-emerald-100 text-emerald-700 border-emerald-300 hover:bg-emerald-200',
+  synced: '',
   unknown: '',
 };
 const OUTCOME_ACTIVE: Record<Outcome, string> = {
@@ -64,6 +65,7 @@ const OUTCOME_ACTIVE: Record<Outcome, string> = {
   struggled: 'bg-amber-500 text-white border-amber-500',
   suboptimal: 'bg-lime-600 text-white border-lime-600',
   clean: 'bg-emerald-600 text-white border-emerald-600',
+  synced: '',
   unknown: '',
 };
 
@@ -309,7 +311,9 @@ export function UnitRecord({
           {isProblem ? (
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[11px] text-stone-400">做得怎么样</span>
+                <span className="text-[11px] text-stone-400">
+                  {parts.outcome === 'synced' ? '已从 leetcode.cn 同步 · 做得怎么样？' : '做得怎么样'}
+                </span>
                 {OUTCOME_ORDER.map((o) => {
                   const active = parts.outcome === o;
                   return (
@@ -336,8 +340,8 @@ export function UnitRecord({
                   disabled={saving}
                   title={
                     parts.redoOn ? `已安排 ${parts.redoOn} 优先重做，点击取消` : parts.redo
-                      ? '已标记待重做，间隔至少 7 天后按两新一旧安排。再点一下取消'
-                      : '标记这题要重做，间隔至少 7 天后进入两新一旧的老题队列'
+                      ? '已标记待重做，间隔至少 7 天后排入（每天最多 1 道）。再点一下取消'
+                      : '标记这题要重做，间隔至少 7 天后排入（每天最多 1 道）'
                   }
                   className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border transition-colors disabled:opacity-50 ${
                     parts.redo
