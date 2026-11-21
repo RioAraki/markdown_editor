@@ -155,3 +155,65 @@ test('only acceptances newer than the last import count, once per problem per da
   assert.equal(lcSync.missedAcceptances(undefined, profile(400), 0), 0);
   assert.equal(lcSync.missedAcceptances(profile(397), profile(420), 15), 8);
 });
+
+const history = load(path.resolve('../diary/shared/interview/abilityHistory.ts'));
+
+test('an unrated synced AC waits for a rating unless deep sync or a redo flag says how it went', () => {
+  const p = new Map([[1, problem(1, 'bfs', 1600)]]);
+  const synced = { 1: { attempts: [{ date: today, outcome: 'synced' }] } };
+  assert.equal(ability.observations(p, synced, undefined, today).length, 0);
+  const deep = (numSubmitted) => ({ userSlug: 'x', deep: { fetchedAt: '', questions: { 1: { status: 'ac', numSubmitted } } } });
+  assert.equal(ability.observations(p, synced, deep(1), today)[0].s, 0.75);
+  assert.equal(ability.observations(p, synced, deep(3), today)[0].s, 0.4);
+  const flagged = { 1: { attempts: [{ date: today, outcome: 'synced', redo: true }] } };
+  assert.equal(ability.observations(p, flagged, deep(1), today)[0].s, ability.OUTCOME_EVIDENCE.struggled.s);
+  // A pending import does not turn the attempt before it into an "earlier" one.
+  const after = { 1: { attempts: [{ date: '2026-11-01', outcome: 'clean' }, { date: today, outcome: 'synced' }] } };
+  const [only] = ability.observations(p, after, undefined, today);
+  assert.equal(only.s, 0.95);
+  assert.ok(only.w > 0.95);
+});
+
+test('the comparison splits a topic change by problem and follows later annotation', () => {
+  const { bank, log } = bankWithHistory();
+  const fitFor = (l) => ability.computeAbility({ problems: bank.problems, topics, log: l, today });
+  const baseline = history.snapshotOf(fitFor(log), log, undefined, { at: '2026-11-19T00:00:00Z', date: '2026-11-19', trigger: 'sync' });
+
+  // Sync brings in two hard bfs problems, not rated yet: nothing moves, both show a range.
+  const imported = { ...log, 2600: { attempts: [{ date: today, outcome: 'synced' }] }, 2700: { attempts: [{ date: today, outcome: 'synced' }] } };
+  let cmp = history.compareAbility({ baseline, current: fitFor(imported), problems: bank.problems, topics, log: imported, sync: undefined, today });
+  const bfs0 = cmp.topics.find((t) => t.id === 'bfs');
+  assert.equal(cmp.changed, 2);
+  assert.equal(bfs0.delta, 0);
+  assert.equal(bfs0.problems.length, 2);
+  for (const p of bfs0.problems) assert.ok(p.pending && p.pending.clean > 0 && p.pending.usedSolution <= 0);
+
+  // Rating one 比较完美 afterwards shows up at once, credited to that problem.
+  const rated = { ...imported, 2700: { attempts: [{ date: today, outcome: 'clean' }] } };
+  cmp = history.compareAbility({ baseline, current: fitFor(rated), problems: bank.problems, topics, log: rated, sync: undefined, today });
+  const bfs = cmp.topics.find((t) => t.id === 'bfs');
+  assert.ok(bfs.delta > 0);
+  const share = bfs.problems.find((p) => p.id === 2700);
+  assert.equal(share.outcome, 'clean');
+  assert.ok(share.delta > 0 && !share.pending);
+  assert.equal(bfs.other, bfs.delta - bfs.problems.reduce((s, p) => s + p.delta, 0));
+  assert.ok(Math.abs(bfs.other) <= 2);
+  assert.equal(cmp.topics.find((t) => t.id === 'seg').problems.length, 0);
+});
+
+test('snapshots: one per day (the first), recent kept, older thinned to one a month', () => {
+  const snap = (date) => ({ at: `${date}T00:00:00Z`, date, trigger: 'sync', global: { theta: 1, sd: 1, n: 0 }, topics: [], evidence: {} });
+  let h = history.addSnapshot({ snapshots: [] }, snap('2026-11-20'));
+  const same = history.addSnapshot(h, { ...snap('2026-11-20'), at: '2026-11-20T09:00:00Z' });
+  assert.equal(same, h);
+  // A stand-in baseline is replaced by the first real snapshot.
+  h = history.addSnapshot({ snapshots: [{ ...snap('2026-11-21'), trigger: 'baseline' }] }, snap('2026-11-21'));
+  assert.deepEqual(h.snapshots.map((s) => s.trigger), ['sync']);
+  h = { snapshots: [] };
+  for (let d = 0; d < 70; d++) {
+    const date = new Date(Date.UTC(2026, 6, 1 + d)).toISOString().slice(0, 10);
+    h = history.addSnapshot(h, snap(date));
+  }
+  assert.equal(h.snapshots.length, 30 + 2);
+  assert.deepEqual(h.snapshots.slice(0, 2).map((s) => s.date), ['2026-07-01', '2026-08-01']);
+});

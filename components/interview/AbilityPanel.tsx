@@ -6,8 +6,11 @@ import { useInterview } from '@/contexts/InterviewContext';
 import type { AbilityReport, TopicAbility } from '@shared/interview/ability';
 import type { LcProfile } from '@shared/interview/lcSync';
 import { PLACEMENT_SD } from '@shared/interview/adaptive';
+import type { AbilityComparison, TopicChange } from '@shared/interview/abilityHistory';
+import { OUTCOME_LABEL } from '@shared/interview/leetcode';
 
 interface AbilityResponse {
+  comparison: AbilityComparison;
   today: string;
   ability: AbilityReport;
   profile: LcProfile | null;
@@ -22,8 +25,11 @@ interface SyncResult {
   added: { id: number; title: string; date: string }[];
   missed: number;
   deepCount?: number;
+  changes?: { name: string; delta: number }[];
   error?: string;
 }
+
+const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`);
 
 const MIN = 1500;
 const MAX = 2300;
@@ -40,17 +46,23 @@ function ago(iso: string | null): string {
   return `${Math.round(mins / 60 / 24)} 天前`;
 }
 
-/** Radar of per-topic ability, with a σ band and clickable axes. */
+/**
+ * Radar of per-topic ability, with a σ band, clickable axes, and the last
+ * sync's shape as a dashed outline. A round usually moves a topic by a few
+ * points, too little to see, so each axis label also carries its change.
+ */
 function Radar({
   topics,
   selected,
   onSelect,
   band,
+  before,
 }: {
   topics: TopicAbility[];
   selected?: string;
   onSelect: (id: string) => void;
   band: boolean;
+  before?: Map<string, number>;
 }) {
   const n = topics.length;
   const pt = (i: number, v: number): [number, number] => {
@@ -72,6 +84,7 @@ function Radar({
         const [x, y] = pt(i, MAX);
         const [lx, ly] = pt(i, MAX + 120);
         const weak = t.sd > PLACEMENT_SD;
+        const delta = before?.has(t.id) ? t.theta - before.get(t.id)! : 0;
         return (
           <g key={t.id} onClick={() => onSelect(t.id)} className="cursor-pointer">
             <line x1={CX} y1={CY} x2={x} y2={y} stroke="#e7e5e4" />
@@ -85,6 +98,11 @@ function Radar({
               fontWeight={selected === t.id ? 600 : 400}
             >
               {t.name}
+              {delta !== 0 && (
+                <tspan fill={delta > 0 ? '#047857' : '#be123c'} fontWeight={600}>
+                  {` ${delta > 0 ? '▲' : '▼'}${Math.abs(delta)}`}
+                </tspan>
+              )}
             </text>
           </g>
         );
@@ -94,6 +112,15 @@ function Radar({
           <polygon points={poly((t) => t.theta + t.sd)} fill="#6366f1" fillOpacity={0.08} stroke="#a5b4fc" strokeDasharray="3 3" />
           <polygon points={poly((t) => t.theta - t.sd)} fill="#ffffff" fillOpacity={0.85} stroke="#a5b4fc" strokeDasharray="3 3" />
         </>
+      )}
+      {before && (
+        <polygon
+          points={poly((t) => before.get(t.id) ?? t.theta)}
+          fill="none"
+          stroke="#94a3b8"
+          strokeWidth={1.5}
+          strokeDasharray="4 3"
+        />
       )}
       <polygon points={poly((t) => t.theta)} fill="#6366f1" fillOpacity={0.18} stroke="#4f46e5" strokeWidth={2} />
       {topics.map((t, i) => {
@@ -114,6 +141,95 @@ function Radar({
         );
       })}
     </svg>
+  );
+}
+
+/** Per-topic change since the last sync, biggest first, each split by problem. */
+function ChangeTable({ comparison }: { comparison: AbilityComparison }) {
+  const rows = comparison.topics
+    .filter((t) => t.delta !== 0 || t.problems.length > 0)
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+  const since = comparison.trigger === 'baseline'
+    ? '同步导入前'
+    : `上次同步（${comparison.since.slice(5, 10)}）`;
+  return (
+    <div className="mx-3 mb-3 rounded-md border border-stone-200 p-2.5">
+      <div className="flex items-baseline justify-between text-[12px]">
+        <span className="font-medium text-stone-700">本轮变化</span>
+        <span className="text-[11px] text-stone-400">
+          相对{since} · 综合 {comparison.global.before} → {comparison.global.after}
+        </span>
+      </div>
+      {rows.length === 0 ? (
+        <div className="mt-1.5 text-[11px] text-stone-400">还没有变化</div>
+      ) : (
+        <div className="mt-1 divide-y divide-stone-100">
+          {rows.map((t) => <ChangeRow key={t.id} t={t} attributed={comparison.attributed} />)}
+        </div>
+      )}
+      {!comparison.attributed && (
+        <div className="mt-1.5 text-[11px] text-stone-400">
+          这轮有 {comparison.changed} 道题的记录变了（多半是首次深度同步），只显示总变化，不逐题拆分
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChangeRow({ t, attributed }: { t: TopicChange; attributed: boolean }) {
+  // Changes well inside σ are mostly noise; show them faintly.
+  const faint = Math.abs(t.delta) < t.sd / 2;
+  const tone = t.delta > 0
+    ? (faint ? 'text-emerald-500' : 'text-emerald-700')
+    : t.delta < 0 ? (faint ? 'text-rose-400' : 'text-rose-700') : 'text-stone-400';
+  const detail = attributed && (t.problems.length > 0 || t.other !== 0);
+  const head = (
+    <span className="flex items-center justify-between gap-2 text-[12px]">
+      <span className="truncate text-stone-700">
+        {t.name}
+        <span className="ml-1.5 font-mono text-[10px] text-stone-400">{t.before} → {t.after} ±{t.sd}</span>
+      </span>
+      <span className={`shrink-0 font-mono font-semibold ${tone}`}>
+        {signed(t.delta)}
+        {faint && t.delta !== 0 && <span className="ml-1 text-[10px] font-normal text-stone-400">误差内</span>}
+      </span>
+    </span>
+  );
+  if (!detail) return <div className="py-1.5">{head}</div>;
+  return (
+    <details className="py-1.5">
+      <summary className="cursor-pointer list-none">{head}</summary>
+      <div className="mt-1 ml-1 pl-2 border-l-2 border-stone-200 space-y-0.5 text-[11px]">
+        {t.problems.map((p) => (
+          <div key={p.id} className="flex items-center justify-between gap-2">
+            <span className="truncate text-stone-600">
+              #{p.id} {p.title}
+              <span className="text-stone-400">
+                {p.rating ? ` · ${p.rating}${p.estimated ? '（估）' : ''}` : ''}
+                {p.outcome ? ` · ${OUTCOME_LABEL[p.outcome]}` : ''}
+              </span>
+            </span>
+            <span className="shrink-0 font-mono">
+              {p.pending ? (
+                <span className="text-stone-400" title="还没注解，暂不计分；括号里是标「看了答案」和「比较完美」后的变化">
+                  待注解 {signed(p.pending.usedSolution)} ~ {signed(p.pending.clean)}
+                </span>
+              ) : (
+                <span className={p.delta > 0 ? 'text-emerald-700' : p.delta < 0 ? 'text-rose-700' : 'text-stone-400'}>
+                  {signed(p.delta)}
+                </span>
+              )}
+            </span>
+          </div>
+        ))}
+        {t.other !== 0 && (
+          <div className="flex justify-between gap-2 text-stone-400">
+            <span>其他（整体联动、时间衰减、竞赛分）</span>
+            <span className="font-mono">{signed(t.other)}</span>
+          </div>
+        )}
+      </div>
+    </details>
   );
 }
 
@@ -204,6 +320,7 @@ export function AbilityPanel() {
   const { ability, profile } = data;
   const topic = ability.topics.find((t) => t.id === selected);
   const inbox = showAllInbox ? data.inbox : data.inbox.slice(0, 6);
+  const before = new Map(data.comparison.topics.map((t) => [t.id, t.before]));
 
   return (
     <div className="space-y-3">
@@ -251,6 +368,15 @@ export function AbilityPanel() {
               ? `新增 ${result.added.length} 题：${result.added.map((a) => `#${a.id}`).join(' ')}`
               : '没有新的 AC'}
             {result.deepCount !== undefined && ` · 深度同步读到 ${result.deepCount} 题`}
+            {!result.error && result.changes && result.changes.length > 0 && (
+              <span className="block mt-0.5">
+                {result.changes.filter((c) => Math.abs(c.delta) >= 3).slice(0, 4)
+                  .map((c) => `${c.name} ${signed(c.delta)}`).join(' · ') || '各考点变化都小于 3'}
+                {result.added.length > 0 && (
+                  <span className="text-emerald-700">；新题记得注解，标完分数会再变</span>
+                )}
+              </span>
+            )}
             {!result.error && result.missed > 0 && (
               <span className="block text-amber-700 mt-0.5">
                 主页 AC 数比同步到的多 {result.missed} 题（公开接口只给最近 15 条）
@@ -261,15 +387,22 @@ export function AbilityPanel() {
         )}
 
         <div className="px-2 pt-1">
-          <Radar topics={ability.topics} selected={selected} onSelect={setSelected} band={band} />
+          <Radar topics={ability.topics} selected={selected} onSelect={setSelected} band={band} before={before} />
         </div>
-        <div className="px-3 pb-2 flex items-center justify-between text-[11px] text-stone-400">
-          <span>空心点 = 数据少、还在定级（σ &gt; {PLACEMENT_SD}）</span>
+        <div className="px-3 pb-2 flex items-center justify-between gap-2 text-[11px] text-stone-400">
+          <span>
+            空心点 = 数据少、还在定级（σ &gt; {PLACEMENT_SD}）
+            <span className="ml-2 inline-flex items-center gap-1">
+              <span className="inline-block w-3 border-t-2 border-dashed border-slate-400" />上次同步
+            </span>
+          </span>
           <label className="flex items-center gap-1">
             <input type="checkbox" checked={band} onChange={(e) => setBand(e.target.checked)} />
             不确定带
           </label>
         </div>
+
+        <ChangeTable comparison={data.comparison} />
 
         {topic && (
           <div className="mx-3 mb-3 rounded-md border border-stone-200 p-2.5 space-y-1.5">

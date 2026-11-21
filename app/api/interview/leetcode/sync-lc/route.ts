@@ -4,7 +4,10 @@ import { guardedPromises as fs } from '@/lib/guardedFs';
 import { resolveLeetCode, saveDeclaredProblem } from '@/lib/declareLeetCode';
 import { NextResponse } from 'next/server';
 import path from 'node:path';
-import { loadLcSync, loadLeetCode } from '@shared/interview/load';
+import { format } from 'date-fns';
+import { loadAbilityHistory, loadLcSync, loadLeetCode } from '@shared/interview/load';
+import { computeAbility } from '@shared/interview/ability';
+import { addSnapshot, baselineOf, snapshotOf } from '@shared/interview/abilityHistory';
 import {
   type LeetCodeLog,
   type Problem,
@@ -27,6 +30,7 @@ const DATA_DIR = resolveServerPaths().interviewData;
 const LOG_PATH = path.join(DATA_DIR, 'leetcode-log.json');
 const SYNC_PATH = path.join(DATA_DIR, 'lc-sync.json');
 const DAY_DIR = path.join(DATA_DIR, 'log');
+const HISTORY_PATH = path.join(DATA_DIR, 'lc-ability-history.json');
 
 class SyncError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -174,6 +178,7 @@ export async function POST(req: Request) {
     ]);
 
     const { bank, log } = await loadLeetCode(DATA_DIR);
+    const today = format(new Date(), 'yyyy-MM-dd');
     const store: LeetCodeLog = { ...log };
     const hasAttempt = (id: number, date: string) =>
       (store[String(id)]?.attempts ?? []).some((a) => a.date === date);
@@ -265,6 +270,26 @@ export async function POST(req: Request) {
     };
     await atomicWriteFile(SYNC_PATH, JSON.stringify(next, null, 2) + '\n', 'utf8');
 
+    // The state before this sync closes the previous round: it becomes the
+    // baseline the radar compares against until the next sync brings
+    // something in. A sync that found nothing leaves the baseline alone.
+    let history = await loadAbilityHistory(DATA_DIR);
+    if (added.length > 0 || deep) {
+      const at = new Date().toISOString();
+      const pre = computeAbility({ problems: bank.problems, topics: bank.topics ?? [], log, sync: state, today });
+      const updated = addSnapshot(history, snapshotOf(pre, log, state, { at, date: today, trigger: deep ? 'deep' : 'sync' }));
+      if (updated !== history) {
+        history = updated;
+        await atomicWriteFile(HISTORY_PATH, JSON.stringify(history) + '\n', 'utf8');
+      }
+    }
+    const baseline = baselineOf(history, { problems: bank.problems, topics: bank.topics ?? [], log: store, sync: next, today });
+    const post = computeAbility({ problems: bank.problems, topics: bank.topics ?? [], log: store, sync: next, today });
+    const changes = post.topics
+      .map((t) => ({ name: t.name, delta: t.theta - (baseline.topics.find((b) => b.id === t.id)?.theta ?? t.theta) }))
+      .filter((c) => c.delta !== 0)
+      .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+
     return NextResponse.json({
       mode,
       added,
@@ -272,6 +297,7 @@ export async function POST(req: Request) {
       profile,
       deepCount: deep?.length,
       lastSyncAt: next.lastSyncAt,
+      changes,
     });
   } catch (error) {
     if (!(error instanceof SyncError)) console.error('Error in POST /api/interview/leetcode/sync-lc:', error);

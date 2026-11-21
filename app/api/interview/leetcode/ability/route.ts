@@ -2,6 +2,8 @@ import { resolveServerPaths } from '@/lib/serverPaths';
 import { loadLeetCodeModel } from '@/lib/leetcodeModel';
 import { NextResponse } from 'next/server';
 import { format } from 'date-fns';
+import { loadAbilityHistory } from '@shared/interview/load';
+import { baselineOf, compareAbility } from '@shared/interview/abilityHistory';
 
 const DATA_DIR = resolveServerPaths().interviewData;
 
@@ -35,8 +37,16 @@ export async function GET() {
     }
     inbox.sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
 
+    // Compare with the snapshot taken at the last sync. Before the first one
+    // exists, the stand-in baseline is the log without any synced import.
+    const history = await loadAbilityHistory(DATA_DIR);
+    const topics = bank.topics ?? [];
+    const baseline = baselineOf(history, { problems: bank.problems, topics, log, sync, today });
+    const comparison = compareAbility({ baseline, current: ability, problems: bank.problems, topics, log, sync, today });
+
     const done = new Set([...Object.keys(log).map(Number), ...solved]);
     return NextResponse.json({
+      comparison,
       today,
       ability,
       profile: sync.profile ?? null,
